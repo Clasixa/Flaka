@@ -1911,11 +1911,32 @@ local function buildGUI()
             label.Text = "Speed x" .. string.format("%.1f", speedHackValue)
         end
 
+        -- wide transparent hit area so clicking anywhere on the row jumps + drags
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 0
+        hit.Parent = content
+
+        local function setSpFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            speedHackValue = spMin + (spMax - spMin) * (relX / tWidth)
+            updateSpSlider()
+        end
+
         updateSpSlider()
 
-        -- drag the thumb to fine-tune (slide 2.0 -> 3.0 etc.)
         local spDrag = false
         thumb.MouseButton1Down:Connect(function() spDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setSpFromX(UserInputService:GetMouseLocation().X)
+            spDrag = true
+        end)
         thumb.MouseButton2Click:Connect(function()
             speedHackValue = spDefault
             updateSpSlider()
@@ -1923,13 +1944,7 @@ local function buildGUI()
 
         table.insert(sliderHandlers, function()
             if not spDrag then return end
-            local tLeft = trackBg.AbsolutePosition.X
-            local tWidth = trackBg.AbsoluteSize.X
-            if tWidth == 0 then return end
-            local mouseX = UserInputService:GetMouseLocation().X
-            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
-            speedHackValue = spMin + (spMax - spMin) * (relX / tWidth)
-            updateSpSlider()
+            setSpFromX(UserInputService:GetMouseLocation().X)
         end)
 
         table.insert(sliderUpHandlers, function()
@@ -1942,6 +1957,11 @@ local function buildGUI()
     -- shared mouse handlers for panel drag + all sliders
     mouseMoveConn = UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+        if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+            panelDragging = false
+            for _, h in ipairs(sliderUpHandlers) do h() end
+            return
+        end
         if panelDragging then
             local mp = UserInputService:GetMouseLocation()
             local delta = Vector2.new(mp.X, mp.Y) - panelDragStart
