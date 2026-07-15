@@ -842,6 +842,23 @@ local function teleportRandomEnemy()
     root.CFrame = targets[math.random(#targets)].CFrame
 end
 
+local function flingEnemies()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                local dir = Vector3.new(math.random(-1, 1), 1, math.random(-1, 1)).Unit
+                local bv = Instance.new("BodyVelocity")
+                bv.Velocity = dir * 500
+                bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                bv.Parent = hrp
+                game:GetService("Debris"):AddItem(bv, 0.5)
+            end
+        end
+    end
+end
+
 local function respawnLocal()
     if not LocalPlayer then return end
     local char = LocalPlayer.Character
@@ -1271,7 +1288,7 @@ local function buildGUI()
 
         local rndBtn = Instance.new("TextButton")
         rndBtn.Size = UDim2.new(0, 110, 0, 24)
-        rndBtn.Position = UDim2.new(0, 72, 0, rowY + 2)
+        rndBtn.Position = UDim2.new(0, 72, 0, y + 30)
         rndBtn.Text = "TP Random (7)"
         rndBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         rndBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
@@ -1284,7 +1301,22 @@ local function buildGUI()
         rndCorner.Parent = rndBtn
         rndBtn.MouseButton1Click:Connect(teleportRandomEnemy)
 
-        rowY = rowY + 56
+        local flingBtn = Instance.new("TextButton")
+        flingBtn.Size = UDim2.new(0, 110, 0, 24)
+        flingBtn.Position = UDim2.new(0, 72, 0, y + 58)
+        flingBtn.Text = "Fling (6)"
+        flingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        flingBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        flingBtn.BorderSizePixel = 0
+        flingBtn.Font = Enum.Font.GothamBold
+        flingBtn.TextSize = 11
+        flingBtn.Parent = content
+        local flingCorner = Instance.new("UICorner")
+        flingCorner.CornerRadius = UDim.new(0, 4)
+        flingCorner.Parent = flingBtn
+        flingBtn.MouseButton1Click:Connect(flingEnemies)
+
+        rowY = y + 88
     end
 
     -- aimbot target part pills
@@ -1804,6 +1836,8 @@ local function init()
             respawnLocal()
         elseif input.KeyCode == Enum.KeyCode.Seven then
             teleportRandomEnemy()
+        elseif input.KeyCode == Enum.KeyCode.Six then
+            flingEnemies()
         end
     end)
 
