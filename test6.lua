@@ -846,48 +846,45 @@ end
 local function flingEnemies()
     if not flingEnabled then return end
     local me = LocalPlayer or Players.LocalPlayer
-    local myRoot = me and me.Character and me.Character:FindFirstChild("HumanoidRootPart")
-    local savedCFrame = myRoot and myRoot.CFrame
+    local myChar = me and me.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+    local savedCFrame = myRoot.CFrame
 
+    -- collect living enemies
+    local targets = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= me and p.Character and p.Character ~= (me and me.Character) then
+        if p ~= me and p.Character and p.Character ~= myChar then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             if hrp and hum and hum.Health > 0 then
-                local dir
-                if myRoot then
-                    dir = (hrp.Position - myRoot.Position).Unit
-                else
-                    dir = Vector3.new(math.random(-1, 1), 1, math.random(-1, 1)).Unit
-                end
-                dir = dir + Vector3.new(0, 0.6, 0)
-                local bv = Instance.new("BodyVelocity")
-                bv.Velocity = dir * 500
-                bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                bv.Parent = hrp
-                game:GetService("Debris"):AddItem(bv, 0.5)
+                table.insert(targets, hrp)
+            end
+        end
+    end
+    if #targets == 0 then return end
+
+    -- FE Yeet method: thrust is on YOUR (client-owned) character, glued to each target,
+    -- so the fling actually replicates to other players. You snap back afterwards.
+    local Thrust = Instance.new("BodyThrust")
+    Thrust.Name = "YeetForce"
+    Thrust.Force = Vector3.new(9999, 9999, 9999)
+    Thrust.Parent = myRoot
+
+    for _, hrp in ipairs(targets) do
+        if hrp and hrp.Parent then
+            local t = tick()
+            while tick() - t < 0.15 and hrp.Parent do
+                myRoot.CFrame = hrp.CFrame
+                Thrust.Location = hrp.Position
+                RunService.Heartbeat:Wait()
             end
         end
     end
 
-    -- keep your own character locked in place during the fling so you don't get launched
-    if myRoot and savedCFrame then
-        local start = tick()
-        local conn
-        conn = RunService.Stepped:Connect(function()
-            if not myRoot or not myRoot.Parent then
-                if conn then conn:Disconnect() end
-                return
-            end
-            myRoot.Velocity = Vector3.zero
-            local stray = myRoot:FindFirstChildOfClass("BodyVelocity")
-            if stray then stray:Destroy() end
-            if tick() - start > 0.6 then
-                myRoot.CFrame = savedCFrame
-                conn:Disconnect()
-            end
-        end)
-    end
+    Thrust:Destroy()
+    myRoot.CFrame = savedCFrame
+    myRoot.Velocity = Vector3.zero
 end
 
 local function respawnLocal()
