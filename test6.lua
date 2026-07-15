@@ -2102,7 +2102,12 @@ RunService.Heartbeat:Connect(function()
     if speedHackEnabled then
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
-            hum.WalkSpeed = 16 * speedHackValue
+            local st = hum:GetState()
+            -- don't override WalkSpeed while sliding/crouching, or the game's
+            -- slide mechanic breaks (it sets its own speed/state)
+            if st ~= Enum.HumanoidStateType.Sliding and st ~= Enum.HumanoidStateType.Crouching then
+                hum.WalkSpeed = 16 * speedHackValue
+            end
             -- speed up reload / action animations too
             for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
                 t:AdjustSpeed(speedHackValue)
