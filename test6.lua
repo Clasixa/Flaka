@@ -11,6 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 local aimbotEnabled = true
 local silentAimEnabled = false
 local wallbangEnabled = false
+local alwaysHitEnabled = false
 local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
@@ -20,7 +21,6 @@ local flyBodyVel = nil
 local flyBodyGyro = nil
 local visCheckEnabled = true
 local savedTeleportPos = nil
-local flingEnabled = true
 local emoteAnimationId = "71617211320246"
 local silentAimKey = Enum.KeyCode.T
 local aimbotTargetHead = true
@@ -862,59 +862,35 @@ local function getEnemies()
     return me, myChar, myRoot, list
 end
 
--- FE DropKick (2025 method): spin + a huge upward/forward boost on YOUR client-owned
--- HumanoidRootPart, glued to each target so the collision kicks them out of the map.
--- Force is on your own body, so it replicates in FE. You snap back afterwards.
-local function feDropKick(targets)
-    local _, _, myRoot = getEnemies()
-    if not myRoot or #targets == 0 then return end
-    local savedCFrame = myRoot.CFrame
-
-    local spin = Instance.new("BodyAngularVelocity")
-    spin.Name = "FESpin"
-    spin.AngularVelocity = Vector3.new(0, 999999, 0)
-    spin.MaxTorque = Vector3.new(999999, 999999, 999999)
-    spin.P = 10000
-    spin.Parent = myRoot
-
-    local boost = Instance.new("BodyVelocity")
-    boost.Name = "FEKick"
-    boost.MaxForce = Vector3.new(1e8, 1e8, 1e8)
-    boost.Velocity = Vector3.new(0, 1200, 0)
-    boost.Parent = myRoot
-
-    for _, e in ipairs(targets) do
-        local hrp = e.hrp
-        if hrp and hrp.Parent then
-            local t = tick()
-            while tick() - t < 0.25 and hrp.Parent do
-                myRoot.CFrame = hrp.CFrame
-                RunService.Heartbeat:Wait()
+-- Always Hit: enlarge enemy character parts locally so your shots connect no matter
+-- the aim precision. Client-only (FE-safe) - the server never sees the size change,
+-- but your client-side raycast/hit detection does, so bullets register as hits.
+local function hitboxApplyChar(char, on)
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            if on then
+                if not part:GetAttribute("AH_OrigSize") then
+                    part:SetAttribute("AH_OrigSize", part.Size)
+                end
+                part.Size = part.Size + Vector3.new(3, 3, 3)
+            else
+                local o = part:GetAttribute("AH_OrigSize")
+                if o then
+                    part.Size = o
+                    part:SetAttribute("AH_OrigSize", nil)
+                end
             end
         end
     end
-
-    spin:Destroy()
-    boost:Destroy()
-    myRoot.CFrame = savedCFrame
-    myRoot.Velocity = Vector3.zero
-    myRoot.RotVelocity = Vector3.zero
 end
 
-local function dropkickNearest()
-    if not flingEnabled then return end
-    local _, _, _, list = getEnemies()
-    if #list == 0 then return end
-    table.sort(list, function(a, b) return a.dist < b.dist end)
-    feDropKick({ list[1] })
-end
-
--- FE DropKick (5): kick EVERY enemy out of the map using the method above.
-local function dropkickAll()
-    if not flingEnabled then return end
-    local _, _, _, list = getEnemies()
-    if #list == 0 then return end
-    feDropKick(list)
+local function hitboxApplyAll(on)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            hitboxApplyChar(p.Character, on)
+        end
+    end
 end
 
 local emoteTrack = nil
@@ -1193,6 +1169,16 @@ local function buildGUI()
         nil, nil
     )
 
+    -- always hit (big hitboxes)
+    rowY = addToggle(rowY, "Always Hit",
+        function() return alwaysHitEnabled end,
+        function(v)
+            alwaysHitEnabled = v
+            hitboxApplyAll(v)
+        end,
+        nil, nil
+    )
+
     -- silent aim keybind row
     do
         local y = rowY
@@ -1311,12 +1297,6 @@ local function buildGUI()
         nil, nil
     )
 
-    rowY = addToggle(rowY, "Fling Others",
-        function() return flingEnabled end,
-        function(v) flingEnabled = v end,
-        nil, nil
-    )
-
     rowY, flyToggleUpdate = addToggle(rowY, "Fly",
         function() return flyEnabled end,
         function(v) flyEnabled = v end,
@@ -1393,36 +1373,6 @@ local function buildGUI()
         rndCorner.CornerRadius = UDim.new(0, 4)
         rndCorner.Parent = rndBtn
         rndBtn.MouseButton1Click:Connect(teleportRandomEnemy)
-
-        local flingBtn = Instance.new("TextButton")
-        flingBtn.Size = UDim2.new(0, 110, 0, 24)
-        flingBtn.Position = UDim2.new(0, 72, 0, y + 58)
-        flingBtn.Text = "DropKick (6)"
-        flingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        flingBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        flingBtn.BorderSizePixel = 0
-        flingBtn.Font = Enum.Font.GothamBold
-        flingBtn.TextSize = 11
-        flingBtn.Parent = content
-        local flingCorner = Instance.new("UICorner")
-        flingCorner.CornerRadius = UDim.new(0, 4)
-        flingCorner.Parent = flingBtn
-        flingBtn.MouseButton1Click:Connect(dropkickNearest)
-
-        local flingAllBtn = Instance.new("TextButton")
-        flingAllBtn.Size = UDim2.new(0, 110, 0, 24)
-        flingAllBtn.Position = UDim2.new(0, 184, 0, y + 58)
-        flingAllBtn.Text = "DropKickAll (5)"
-        flingAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        flingAllBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        flingAllBtn.BorderSizePixel = 0
-        flingAllBtn.Font = Enum.Font.GothamBold
-        flingAllBtn.TextSize = 11
-        flingAllBtn.Parent = content
-        local flingAllCorner = Instance.new("UICorner")
-        flingAllCorner.CornerRadius = UDim.new(0, 4)
-        flingAllCorner.Parent = flingAllBtn
-        flingAllBtn.MouseButton1Click:Connect(dropkickAll)
 
         local emoteBtn = Instance.new("TextButton")
         emoteBtn.Size = UDim2.new(0, 110, 0, 24)
@@ -1959,10 +1909,6 @@ local function init()
             respawnLocal()
         elseif input.KeyCode == Enum.KeyCode.Seven then
             teleportRandomEnemy()
-        elseif input.KeyCode == Enum.KeyCode.Six then
-            dropkickNearest()
-        elseif input.KeyCode == Enum.KeyCode.Five then
-            dropkickAll()
         elseif input.KeyCode == Enum.KeyCode.Four then
             playEmote()
         end
@@ -1974,6 +1920,17 @@ local function init()
             setupESP(p)
         end
     end)
+
+    -- Always Hit: enlarge new / respawning enemies so shots connect
+    local function connectHitbox(p)
+        if p == LocalPlayer then return end
+        p.CharacterAdded:Connect(function(c)
+            if alwaysHitEnabled then hitboxApplyChar(c, true) end
+        end)
+        if p.Character then hitboxApplyChar(p.Character, alwaysHitEnabled) end
+    end
+    Players.PlayerAdded:Connect(connectHitbox)
+    for _, p in ipairs(Players:GetPlayers()) do connectHitbox(p) end
 
     -- cleanup when a player leaves (prevents leaks from RenderStepped connections)
     Players.PlayerRemoving:Connect(function(p)
