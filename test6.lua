@@ -823,6 +823,25 @@ local function teleportToSaved()
     root.CFrame = savedTeleportPos
 end
 
+local function teleportRandomEnemy()
+    local targets = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 then
+                table.insert(targets, hrp)
+            end
+        end
+    end
+    if #targets == 0 then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    root.CFrame = targets[math.random(#targets)].CFrame
+end
+
 local function respawnLocal()
     if not LocalPlayer then return end
     local char = LocalPlayer.Character
@@ -1249,7 +1268,23 @@ local function buildGUI()
         mkBtn("Save (,)", 72, saveTeleportPos)
         mkBtn("TP (.)", 72 + btnW + gap, teleportToSaved)
         mkBtn("Respawn (8)", 72 + (btnW + gap) * 2, respawnLocal)
-        rowY = rowY + 30
+
+        local rndBtn = Instance.new("TextButton")
+        rndBtn.Size = UDim2.new(0, 110, 0, 24)
+        rndBtn.Position = UDim2.new(0, 72, 0, rowY + 2)
+        rndBtn.Text = "TP Random (7)"
+        rndBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        rndBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        rndBtn.BorderSizePixel = 0
+        rndBtn.Font = Enum.Font.GothamBold
+        rndBtn.TextSize = 11
+        rndBtn.Parent = content
+        local rndCorner = Instance.new("UICorner")
+        rndCorner.CornerRadius = UDim.new(0, 4)
+        rndCorner.Parent = rndBtn
+        rndBtn.MouseButton1Click:Connect(teleportRandomEnemy)
+
+        rowY = rowY + 56
     end
 
     -- aimbot target part pills
@@ -1767,6 +1802,8 @@ local function init()
             if noclipToggleUpdate then noclipToggleUpdate() end
         elseif input.KeyCode == Enum.KeyCode.Eight then
             respawnLocal()
+        elseif input.KeyCode == Enum.KeyCode.Seven then
+            teleportRandomEnemy()
         end
     end)
 
