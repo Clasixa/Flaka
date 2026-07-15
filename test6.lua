@@ -1896,6 +1896,14 @@ local function buildGUI()
         trackCorner.CornerRadius = UDim.new(0, 2)
         trackCorner.Parent = track
 
+        -- larger invisible hit area so the thin track is easy to click (behind thumb)
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.Parent = content
+
         local thumb = Instance.new("TextButton")
         thumb.Size = UDim2.new(0, 16, 0, 16)
         thumb.Text = ""
@@ -1912,17 +1920,6 @@ local function buildGUI()
         thumbStroke.Thickness = 2
         thumbStroke.Parent = thumb
 
-        -- larger invisible hit area so the thin track is easy to click
-        local hit = Instance.new("TextButton")
-        hit.Size = UDim2.new(1, 0, 0, 30)
-        hit.Position = UDim2.new(0, 0, 0, y + 6)
-        hit.BackgroundTransparency = 1
-        hit.Text = ""
-        hit.Parent = content
-        hit.MouseButton1Down:Connect(function()
-            setFromX(UserInputService:GetMouseLocation().X)
-        end)
-
         local spMin, spMax = 1, 50
         local spDefault = 2
 
@@ -1935,7 +1932,7 @@ local function buildGUI()
             label.Text = "Speed x" .. string.format("%.1f", speedHackValue)
         end
 
-        -- click-to-set: jump to the clicked point and stop (no drag-follow)
+        -- click on track/hit area = jump to that point and stop (no drag-follow)
         local function setFromX(mouseX)
             local tLeft = trackBg.AbsolutePosition.X
             local tWidth = trackBg.AbsoluteSize.X
@@ -1947,18 +1944,37 @@ local function buildGUI()
 
         updateSpSlider()
 
+        hit.MouseButton1Down:Connect(function()
+            setFromX(UserInputService:GetMouseLocation().X)
+        end)
         trackBg.MouseButton1Down:Connect(function()
             setFromX(UserInputService:GetMouseLocation().X)
         end)
         track.MouseButton1Down:Connect(function()
             setFromX(UserInputService:GetMouseLocation().X)
         end)
-        thumb.MouseButton1Down:Connect(function()
-            setFromX(UserInputService:GetMouseLocation().X)
-        end)
+
+        -- drag the thumb to fine-tune (slide 2.0 -> 3.0 etc.)
+        local spDrag = false
+        thumb.MouseButton1Down:Connect(function() spDrag = true end)
         thumb.MouseButton2Click:Connect(function()
             speedHackValue = spDefault
             updateSpSlider()
+        end)
+
+        table.insert(sliderHandlers, function()
+            if not spDrag then return end
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local mouseX = UserInputService:GetMouseLocation().X
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            speedHackValue = spMin + (spMax - spMin) * (relX / tWidth)
+            updateSpSlider()
+        end)
+
+        table.insert(sliderUpHandlers, function()
+            spDrag = false
         end)
     end
 
