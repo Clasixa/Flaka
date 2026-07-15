@@ -1321,19 +1321,6 @@ local function buildGUI()
     )
 
     -- speed hack toggle
-    local function setSpeedHack(v)
-        speedHackEnabled = v
-        if not v and LocalPlayer.Character then
-            local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.WalkSpeed = 16
-                for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
-                    t:AdjustSpeed(1)
-                end
-            end
-        end
-    end
-
     rowY, speedToggleUpdate = addToggle(rowY, "Speed",
         function() return speedHackEnabled end,
         setSpeedHack,
@@ -2096,6 +2083,20 @@ local function init()
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer then
                 setupESP(p)
+            end
+        end
+    end
+end
+
+-- Speed hack setter (module scope so the keybind in init() can call it too)
+local function setSpeedHack(v)
+    speedHackEnabled = v
+    if not v and LocalPlayer and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 16
+            for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
+                t:AdjustSpeed(1)
             end
         end
     end
