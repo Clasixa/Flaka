@@ -12,6 +12,8 @@ local aimbotEnabled = true
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
+local godmodeEnabled = false
+local antiAimEnabled = false
 local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
@@ -1309,6 +1311,19 @@ local function buildGUI()
         nil, nil
     )
 
+    -- defense against other players' aimbots
+    rowY = addToggle(rowY, "Godmode",
+        function() return godmodeEnabled end,
+        function(v) godmodeEnabled = v end,
+        nil, nil
+    )
+
+    rowY = addToggle(rowY, "Anti-Aim",
+        function() return antiAimEnabled end,
+        function(v) antiAimEnabled = v end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -1946,6 +1961,28 @@ local function init()
         end
     end
 end
+
+-- Defense: Godmode (health lock) + Anti-Aim (jitter to break enemy aimbot locks).
+-- Runs once, outside buildGUI, so it isn't duplicated on respawn.
+RunService.Heartbeat:Connect(function()
+    if not LocalPlayer or not LocalPlayer.Character then return end
+    local char = LocalPlayer.Character
+
+    if godmodeEnabled then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+    end
+
+    if antiAimEnabled then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            -- random yaw each frame so a locking aimbot can't track your head
+            hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(math.random(-30, 30)), 0)
+        end
+    end
+end)
 
 -- initial run
 init()
