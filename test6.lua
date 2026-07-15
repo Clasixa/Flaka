@@ -843,12 +843,20 @@ local function teleportRandomEnemy()
 end
 
 local function flingEnemies()
+    local me = LocalPlayer or Players.LocalPlayer
+    local myRoot = me and me.Character and me.Character:FindFirstChild("HumanoidRootPart")
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
+        if p ~= me and p.Character and p.Character ~= (me and me.Character) then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             if hrp and hum and hum.Health > 0 then
-                local dir = Vector3.new(math.random(-1, 1), 1, math.random(-1, 1)).Unit
+                local dir
+                if myRoot then
+                    dir = (hrp.Position - myRoot.Position).Unit
+                else
+                    dir = Vector3.new(math.random(-1, 1), 1, math.random(-1, 1)).Unit
+                end
+                dir = dir + Vector3.new(0, 0.6, 0)
                 local bv = Instance.new("BodyVelocity")
                 bv.Velocity = dir * 500
                 bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
