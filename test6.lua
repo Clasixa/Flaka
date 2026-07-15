@@ -21,6 +21,7 @@ local flyBodyGyro = nil
 local visCheckEnabled = true
 local savedTeleportPos = nil
 local flingEnabled = true
+local emoteAnimationId = "99198989"
 local silentAimKey = Enum.KeyCode.T
 local aimbotTargetHead = true
 local aimbotTargetBody = false
@@ -905,6 +906,28 @@ local function flingAll()
     yeetTargets(list)
 end
 
+local emoteTrack = nil
+
+local function playEmote()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if emoteTrack then
+        emoteTrack:Stop()
+        emoteTrack = nil
+    end
+    if emoteAnimationId ~= "" then
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. emoteAnimationId
+        emoteTrack = hum:LoadAnimation(anim)
+        emoteTrack.Looped = true
+        emoteTrack:Play()
+    else
+        pcall(function() hum:PlayEmote("Laugh") end)
+    end
+end
+
 local function respawnLocal()
     if not LocalPlayer then return end
     local char = LocalPlayer.Character
@@ -1383,7 +1406,22 @@ local function buildGUI()
         flingAllCorner.Parent = flingAllBtn
         flingAllBtn.MouseButton1Click:Connect(flingAll)
 
-        rowY = y + 88
+        local emoteBtn = Instance.new("TextButton")
+        emoteBtn.Size = UDim2.new(0, 110, 0, 24)
+        emoteBtn.Position = UDim2.new(0, 72, 0, y + 86)
+        emoteBtn.Text = "Emote (4)"
+        emoteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        emoteBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        emoteBtn.BorderSizePixel = 0
+        emoteBtn.Font = Enum.Font.GothamBold
+        emoteBtn.TextSize = 11
+        emoteBtn.Parent = content
+        local emoteCorner = Instance.new("UICorner")
+        emoteCorner.CornerRadius = UDim.new(0, 4)
+        emoteCorner.Parent = emoteBtn
+        emoteBtn.MouseButton1Click:Connect(playEmote)
+
+        rowY = y + 118
     end
 
     -- aimbot target part pills
@@ -1907,6 +1945,8 @@ local function init()
             flingNearest()
         elseif input.KeyCode == Enum.KeyCode.Five then
             flingAll()
+        elseif input.KeyCode == Enum.KeyCode.Four then
+            playEmote()
         end
     end)
 
