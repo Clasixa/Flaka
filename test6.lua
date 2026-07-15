@@ -899,11 +899,25 @@ local function flingNearest()
     yeetTargets({ list[1] })
 end
 
+-- Simple & Clean Fling (FE): BodyVelocity shove on each target's HRP, auto-removed.
+local FlingPower = 5000
+local FlingRange = 50
+
 local function flingAll()
     if not flingEnabled then return end
-    local _, _, _, list = getEnemies()
-    if #list == 0 then return end
-    yeetTargets(list)
+    local _, _, myRoot, list = getEnemies()
+    if not myRoot or #list == 0 then return end
+    for _, e in ipairs(list) do
+        local hrp = e.hrp
+        if hrp and hrp.Parent and (hrp.Position - myRoot.Position).Magnitude <= FlingRange then
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "FlingForce"
+            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+            bv.Velocity = (hrp.Position - myRoot.Position).Unit * FlingPower + Vector3.new(0, 100, 0)
+            bv.Parent = hrp
+            game.Debris:AddItem(bv, 0.5)
+        end
+    end
 end
 
 local emoteTrack = nil
@@ -920,9 +934,16 @@ local function playEmote()
     if emoteAnimationId ~= "" then
         local anim = Instance.new("Animation")
         anim.AnimationId = "rbxassetid://" .. emoteAnimationId
-        emoteTrack = hum:LoadAnimation(anim)
-        emoteTrack.Looped = true
-        emoteTrack:Play()
+        anim.Parent = char
+        local ok, track = pcall(function() return hum:LoadAnimation(anim) end)
+        if ok and track then
+            emoteTrack = track
+            emoteTrack.Looped = true
+            emoteTrack.Priority = Enum.AnimationPriority.Action4
+            emoteTrack:Play()
+        else
+            warn("[Emote] failed to load animation " .. tostring(emoteAnimationId) .. " -> " .. tostring(track))
+        end
     else
         pcall(function() hum:PlayEmote("Laugh") end)
     end
