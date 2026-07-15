@@ -862,33 +862,36 @@ local function getEnemies()
     return me, myChar, myRoot, list
 end
 
--- FE Yeet method: thrust is on YOUR (client-owned) character, glued to each target,
--- so the fling actually replicates to other players. You snap back afterwards.
-local function yeetTargets(targets)
+-- FE Fling (2025 method): spin YOUR client-owned HumanoidRootPart at massive angular
+-- velocity, glue to each target so the collision flings them. Because the force is on
+-- your own body it replicates in FE. You snap back afterwards.
+local function feFling(targets)
     local _, _, myRoot = getEnemies()
     if not myRoot or #targets == 0 then return end
     local savedCFrame = myRoot.CFrame
 
-    local Thrust = Instance.new("BodyThrust")
-    Thrust.Name = "YeetForce"
-    Thrust.Force = Vector3.new(9999, 9999, 9999)
-    Thrust.Parent = myRoot
+    local spin = Instance.new("BodyAngularVelocity")
+    spin.Name = "FESpin"
+    spin.AngularVelocity = Vector3.new(0, 999999, 0)
+    spin.MaxTorque = Vector3.new(999999, 999999, 999999)
+    spin.P = 10000
+    spin.Parent = myRoot
 
     for _, e in ipairs(targets) do
         local hrp = e.hrp
         if hrp and hrp.Parent then
             local t = tick()
-            while tick() - t < 0.15 and hrp.Parent do
+            while tick() - t < 0.2 and hrp.Parent do
                 myRoot.CFrame = hrp.CFrame
-                Thrust.Location = hrp.Position
                 RunService.Heartbeat:Wait()
             end
         end
     end
 
-    Thrust:Destroy()
+    spin:Destroy()
     myRoot.CFrame = savedCFrame
     myRoot.Velocity = Vector3.zero
+    myRoot.RotVelocity = Vector3.zero
 end
 
 local function flingNearest()
@@ -896,28 +899,15 @@ local function flingNearest()
     local _, _, _, list = getEnemies()
     if #list == 0 then return end
     table.sort(list, function(a, b) return a.dist < b.dist end)
-    yeetTargets({ list[1] })
+    feFling({ list[1] })
 end
 
--- Simple & Clean Fling (FE): BodyVelocity shove on each target's HRP, auto-removed.
-local FlingPower = 5000
-local FlingRange = 50
-
+-- FE Fling (5): fling EVERY enemy using the spin method above.
 local function flingAll()
     if not flingEnabled then return end
-    local _, _, myRoot, list = getEnemies()
-    if not myRoot or #list == 0 then return end
-    for _, e in ipairs(list) do
-        local hrp = e.hrp
-        if hrp and hrp.Parent and (hrp.Position - myRoot.Position).Magnitude <= FlingRange then
-            local bv = Instance.new("BodyVelocity")
-            bv.Name = "FlingForce"
-            bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-            bv.Velocity = (hrp.Position - myRoot.Position).Unit * FlingPower + Vector3.new(0, 100, 0)
-            bv.Parent = hrp
-            game.Debris:AddItem(bv, 0.5)
-        end
-    end
+    local _, _, _, list = getEnemies()
+    if #list == 0 then return end
+    feFling(list)
 end
 
 local emoteTrack = nil
