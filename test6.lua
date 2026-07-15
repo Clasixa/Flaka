@@ -12,8 +12,9 @@ local aimbotEnabled = true
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
-local godmodeEnabled = false
 local antiAimEnabled = false
+local speedHackEnabled = false
+local speedHackValue = 2
 local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
@@ -67,6 +68,7 @@ local panel
 local toggleBtnRef = nil
 local flyToggleUpdate = nil
 local noclipToggleUpdate = nil
+local speedToggleUpdate = nil
 local fovCircle
 local mouseMoveConn
 local mouseUpConn
@@ -1312,15 +1314,29 @@ local function buildGUI()
     )
 
     -- defense against other players' aimbots
-    rowY = addToggle(rowY, "Godmode",
-        function() return godmodeEnabled end,
-        function(v) godmodeEnabled = v end,
-        nil, nil
-    )
-
     rowY = addToggle(rowY, "Anti-Aim",
         function() return antiAimEnabled end,
         function(v) antiAimEnabled = v end,
+        nil, nil
+    )
+
+    -- speed hack toggle
+    local function setSpeedHack(v)
+        speedHackEnabled = v
+        if not v and LocalPlayer.Character then
+            local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = 16
+                for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
+                    t:AdjustSpeed(1)
+                end
+            end
+        end
+    end
+
+    rowY, speedToggleUpdate = addToggle(rowY, "Speed",
+        function() return speedHackEnabled end,
+        setSpeedHack,
         nil, nil
     )
 
@@ -1844,6 +1860,99 @@ local function buildGUI()
 
     rowY = rowY + 45
 
+    -- speed multiplier slider
+    do
+        local y = rowY
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 16)
+        label.Position = UDim2.new(0, 0, 0, y)
+        label.Text = "Speed x" .. string.format("%.1f", speedHackValue)
+        label.TextColor3 = Color3.fromRGB(190, 190, 195)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = content
+
+        local trackBg = Instance.new("Frame")
+        trackBg.Size = UDim2.new(1, -14, 0, 3)
+        trackBg.Position = UDim2.new(0, 0, 0, y + 22)
+        trackBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        trackBg.BorderSizePixel = 0
+        trackBg.Parent = content
+
+        local trackBgCorner = Instance.new("UICorner")
+        trackBgCorner.CornerRadius = UDim.new(0, 2)
+        trackBgCorner.Parent = trackBg
+
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(0, 0, 1, 0)
+        track.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+        track.BorderSizePixel = 0
+        track.Parent = trackBg
+
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(0, 2)
+        trackCorner.Parent = track
+
+        local thumb = Instance.new("TextButton")
+        thumb.Size = UDim2.new(0, 16, 0, 16)
+        thumb.Text = ""
+        thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        thumb.BorderSizePixel = 0
+        thumb.Parent = content
+
+        local thumbCorner = Instance.new("UICorner")
+        thumbCorner.CornerRadius = UDim.new(0, 8)
+        thumbCorner.Parent = thumb
+
+        local thumbStroke = Instance.new("UIStroke")
+        thumbStroke.Color = Color3.fromRGB(0, 180, 255)
+        thumbStroke.Thickness = 2
+        thumbStroke.Parent = thumb
+
+        local spMin, spMax = 1, 5
+        local spDefault = 2
+
+        local function updateSpSlider()
+            local trackWidth = trackBg.AbsoluteSize.X
+            if trackWidth == 0 then return end
+            local relX = (speedHackValue - spMin) / (spMax - spMin) * trackWidth
+            track.Size = UDim2.new(0, relX, 1, 0)
+            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
+            label.Text = "Speed x" .. string.format("%.1f", speedHackValue)
+        end
+
+        updateSpSlider()
+
+        local spDrag = false
+        thumb.MouseButton1Down:Connect(function() spDrag = true end)
+        thumb.MouseButton2Click:Connect(function()
+            speedHackValue = spDefault
+            updateSpSlider()
+        end)
+
+        table.insert(sliderHandlers, function()
+            if not spDrag then return end
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local mouseX = UserInputService:GetMouseLocation().X
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            speedHackValue = spMin + (spMax - spMin) * (relX / tWidth)
+            track.Size = UDim2.new(0, relX, 1, 0)
+            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
+            label.Text = "Speed x" .. string.format("%.1f", speedHackValue)
+        end)
+
+        table.insert(sliderUpHandlers, function()
+            spDrag = false
+        end)
+    end
+
+    rowY = rowY + 45
+
     -- shared mouse handlers for panel drag + all sliders
     mouseMoveConn = UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
@@ -1921,9 +2030,12 @@ local function init()
             noclipEnabled = not noclipEnabled
             if noclipToggleUpdate then noclipToggleUpdate() end
         elseif input.KeyCode == Enum.KeyCode.Eight then
-            respawnLocal()
+            setSpeedHack(not speedHackEnabled)
+            if speedToggleUpdate then speedToggleUpdate() end
         elseif input.KeyCode == Enum.KeyCode.Seven then
             teleportRandomEnemy()
+        elseif input.KeyCode == Enum.KeyCode.Backquote then
+            respawnLocal()
         elseif input.KeyCode == Enum.KeyCode.Four then
             playEmote()
         end
@@ -1968,18 +2080,22 @@ RunService.Heartbeat:Connect(function()
     if not LocalPlayer or not LocalPlayer.Character then return end
     local char = LocalPlayer.Character
 
-    if godmodeEnabled then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health < hum.MaxHealth then
-            hum.Health = hum.MaxHealth
-        end
-    end
-
     if antiAimEnabled then
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
             -- random yaw each frame so a locking aimbot can't track your head
             hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(math.random(-30, 30)), 0)
+        end
+    end
+
+    if speedHackEnabled then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 16 * speedHackValue
+            -- speed up reload / action animations too
+            for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
+                t:AdjustSpeed(speedHackValue)
+            end
         end
     end
 end)
