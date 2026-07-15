@@ -862,10 +862,10 @@ local function getEnemies()
     return me, myChar, myRoot, list
 end
 
--- FE Fling (2025 method): spin YOUR client-owned HumanoidRootPart at massive angular
--- velocity, glue to each target so the collision flings them. Because the force is on
--- your own body it replicates in FE. You snap back afterwards.
-local function feFling(targets)
+-- FE DropKick (2025 method): spin + a huge upward/forward boost on YOUR client-owned
+-- HumanoidRootPart, glued to each target so the collision kicks them out of the map.
+-- Force is on your own body, so it replicates in FE. You snap back afterwards.
+local function feDropKick(targets)
     local _, _, myRoot = getEnemies()
     if not myRoot or #targets == 0 then return end
     local savedCFrame = myRoot.CFrame
@@ -877,11 +877,17 @@ local function feFling(targets)
     spin.P = 10000
     spin.Parent = myRoot
 
+    local boost = Instance.new("BodyVelocity")
+    boost.Name = "FEKick"
+    boost.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+    boost.Velocity = Vector3.new(0, 1200, 0)
+    boost.Parent = myRoot
+
     for _, e in ipairs(targets) do
         local hrp = e.hrp
         if hrp and hrp.Parent then
             local t = tick()
-            while tick() - t < 0.2 and hrp.Parent do
+            while tick() - t < 0.25 and hrp.Parent do
                 myRoot.CFrame = hrp.CFrame
                 RunService.Heartbeat:Wait()
             end
@@ -889,25 +895,26 @@ local function feFling(targets)
     end
 
     spin:Destroy()
+    boost:Destroy()
     myRoot.CFrame = savedCFrame
     myRoot.Velocity = Vector3.zero
     myRoot.RotVelocity = Vector3.zero
 end
 
-local function flingNearest()
+local function dropkickNearest()
     if not flingEnabled then return end
     local _, _, _, list = getEnemies()
     if #list == 0 then return end
     table.sort(list, function(a, b) return a.dist < b.dist end)
-    feFling({ list[1] })
+    feDropKick({ list[1] })
 end
 
--- FE Fling (5): fling EVERY enemy using the spin method above.
-local function flingAll()
+-- FE DropKick (5): kick EVERY enemy out of the map using the method above.
+local function dropkickAll()
     if not flingEnabled then return end
     local _, _, _, list = getEnemies()
     if #list == 0 then return end
-    feFling(list)
+    feDropKick(list)
 end
 
 local emoteTrack = nil
@@ -1390,7 +1397,7 @@ local function buildGUI()
         local flingBtn = Instance.new("TextButton")
         flingBtn.Size = UDim2.new(0, 110, 0, 24)
         flingBtn.Position = UDim2.new(0, 72, 0, y + 58)
-        flingBtn.Text = "Fling (6)"
+        flingBtn.Text = "DropKick (6)"
         flingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         flingBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         flingBtn.BorderSizePixel = 0
@@ -1400,12 +1407,12 @@ local function buildGUI()
         local flingCorner = Instance.new("UICorner")
         flingCorner.CornerRadius = UDim.new(0, 4)
         flingCorner.Parent = flingBtn
-        flingBtn.MouseButton1Click:Connect(flingNearest)
+        flingBtn.MouseButton1Click:Connect(dropkickNearest)
 
         local flingAllBtn = Instance.new("TextButton")
         flingAllBtn.Size = UDim2.new(0, 110, 0, 24)
         flingAllBtn.Position = UDim2.new(0, 184, 0, y + 58)
-        flingAllBtn.Text = "FlingAll (5)"
+        flingAllBtn.Text = "DropKickAll (5)"
         flingAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         flingAllBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         flingAllBtn.BorderSizePixel = 0
@@ -1415,7 +1422,7 @@ local function buildGUI()
         local flingAllCorner = Instance.new("UICorner")
         flingAllCorner.CornerRadius = UDim.new(0, 4)
         flingAllCorner.Parent = flingAllBtn
-        flingAllBtn.MouseButton1Click:Connect(flingAll)
+        flingAllBtn.MouseButton1Click:Connect(dropkickAll)
 
         local emoteBtn = Instance.new("TextButton")
         emoteBtn.Size = UDim2.new(0, 110, 0, 24)
@@ -1953,9 +1960,9 @@ local function init()
         elseif input.KeyCode == Enum.KeyCode.Seven then
             teleportRandomEnemy()
         elseif input.KeyCode == Enum.KeyCode.Six then
-            flingNearest()
+            dropkickNearest()
         elseif input.KeyCode == Enum.KeyCode.Five then
-            flingAll()
+            dropkickAll()
         elseif input.KeyCode == Enum.KeyCode.Four then
             playEmote()
         end
