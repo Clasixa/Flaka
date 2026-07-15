@@ -20,6 +20,7 @@ local flyBodyVel = nil
 local flyBodyGyro = nil
 local visCheckEnabled = true
 local savedTeleportPos = nil
+local flingEnabled = true
 local silentAimKey = Enum.KeyCode.T
 local aimbotTargetHead = true
 local aimbotTargetBody = false
@@ -843,8 +844,11 @@ local function teleportRandomEnemy()
 end
 
 local function flingEnemies()
+    if not flingEnabled then return end
     local me = LocalPlayer or Players.LocalPlayer
     local myRoot = me and me.Character and me.Character:FindFirstChild("HumanoidRootPart")
+    local savedCFrame = myRoot and myRoot.CFrame
+
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= me and p.Character and p.Character ~= (me and me.Character) then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -864,6 +868,25 @@ local function flingEnemies()
                 game:GetService("Debris"):AddItem(bv, 0.5)
             end
         end
+    end
+
+    -- keep your own character locked in place during the fling so you don't get launched
+    if myRoot and savedCFrame then
+        local start = tick()
+        local conn
+        conn = RunService.Stepped:Connect(function()
+            if not myRoot or not myRoot.Parent then
+                if conn then conn:Disconnect() end
+                return
+            end
+            myRoot.Velocity = Vector3.zero
+            local stray = myRoot:FindFirstChildOfClass("BodyVelocity")
+            if stray then stray:Destroy() end
+            if tick() - start > 0.6 then
+                myRoot.CFrame = savedCFrame
+                conn:Disconnect()
+            end
+        end)
     end
 end
 
@@ -1229,6 +1252,12 @@ local function buildGUI()
     rowY, noclipToggleUpdate = addToggle(rowY, "Noclip",
         function() return noclipEnabled end,
         function(v) noclipEnabled = v end,
+        nil, nil
+    )
+
+    rowY = addToggle(rowY, "Fling Others",
+        function() return flingEnabled end,
+        function(v) flingEnabled = v end,
         nil, nil
     )
 
