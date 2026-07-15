@@ -843,35 +843,38 @@ local function teleportRandomEnemy()
     root.CFrame = targets[math.random(#targets)].CFrame
 end
 
-local function flingEnemies()
-    if not flingEnabled then return end
+local function getEnemies()
     local me = LocalPlayer or Players.LocalPlayer
     local myChar = me and me.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return end
-    local savedCFrame = myRoot.CFrame
-
-    -- collect living enemies
-    local targets = {}
+    local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= me and p.Character and p.Character ~= myChar then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             if hrp and hum and hum.Health > 0 then
-                table.insert(targets, hrp)
+                local dist = myRoot and (hrp.Position - myRoot.Position).Magnitude or 0
+                table.insert(list, { hrp = hrp, dist = dist })
             end
         end
     end
-    if #targets == 0 then return end
+    return me, myChar, myRoot, list
+end
 
-    -- FE Yeet method: thrust is on YOUR (client-owned) character, glued to each target,
-    -- so the fling actually replicates to other players. You snap back afterwards.
+-- FE Yeet method: thrust is on YOUR (client-owned) character, glued to each target,
+-- so the fling actually replicates to other players. You snap back afterwards.
+local function yeetTargets(targets)
+    local _, _, myRoot = getEnemies()
+    if not myRoot or #targets == 0 then return end
+    local savedCFrame = myRoot.CFrame
+
     local Thrust = Instance.new("BodyThrust")
     Thrust.Name = "YeetForce"
     Thrust.Force = Vector3.new(9999, 9999, 9999)
     Thrust.Parent = myRoot
 
-    for _, hrp in ipairs(targets) do
+    for _, e in ipairs(targets) do
+        local hrp = e.hrp
         if hrp and hrp.Parent then
             local t = tick()
             while tick() - t < 0.15 and hrp.Parent do
@@ -885,6 +888,21 @@ local function flingEnemies()
     Thrust:Destroy()
     myRoot.CFrame = savedCFrame
     myRoot.Velocity = Vector3.zero
+end
+
+local function flingNearest()
+    if not flingEnabled then return end
+    local _, _, _, list = getEnemies()
+    if #list == 0 then return end
+    table.sort(list, function(a, b) return a.dist < b.dist end)
+    yeetTargets({ list[1] })
+end
+
+local function flingAll()
+    if not flingEnabled then return end
+    local _, _, _, list = getEnemies()
+    if #list == 0 then return end
+    yeetTargets(list)
 end
 
 local function respawnLocal()
@@ -1348,7 +1366,22 @@ local function buildGUI()
         local flingCorner = Instance.new("UICorner")
         flingCorner.CornerRadius = UDim.new(0, 4)
         flingCorner.Parent = flingBtn
-        flingBtn.MouseButton1Click:Connect(flingEnemies)
+        flingBtn.MouseButton1Click:Connect(flingNearest)
+
+        local flingAllBtn = Instance.new("TextButton")
+        flingAllBtn.Size = UDim2.new(0, 110, 0, 24)
+        flingAllBtn.Position = UDim2.new(0, 184, 0, y + 58)
+        flingAllBtn.Text = "FlingAll (5)"
+        flingAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        flingAllBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        flingAllBtn.BorderSizePixel = 0
+        flingAllBtn.Font = Enum.Font.GothamBold
+        flingAllBtn.TextSize = 11
+        flingAllBtn.Parent = content
+        local flingAllCorner = Instance.new("UICorner")
+        flingAllCorner.CornerRadius = UDim.new(0, 4)
+        flingAllCorner.Parent = flingAllBtn
+        flingAllBtn.MouseButton1Click:Connect(flingAll)
 
         rowY = y + 88
     end
@@ -1871,7 +1904,9 @@ local function init()
         elseif input.KeyCode == Enum.KeyCode.Seven then
             teleportRandomEnemy()
         elseif input.KeyCode == Enum.KeyCode.Six then
-            flingEnemies()
+            flingNearest()
+        elseif input.KeyCode == Enum.KeyCode.Five then
+            flingAll()
         end
     end)
 
