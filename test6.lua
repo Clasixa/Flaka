@@ -42,6 +42,9 @@ local cameraFov = 75
 local aimbotSmoothness = 0.3
 local autoShootCooldown = 0.12
 local lastShotTime = 0
+local autoFireEnabled = false
+local autoFireRate = 15
+local lastAutoFireTime = 0
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -1349,6 +1352,13 @@ local function buildGUI()
         nil, nil
     )
 
+    -- auto fire (spam click as fast as fire rate allows)
+    rowY = addToggle(rowY, "Auto Fire",
+        function() return autoFireEnabled end,
+        function(v) autoFireEnabled = v end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -2126,6 +2136,113 @@ local function buildGUI()
 
     rowY = rowY + 45
 
+    -- auto fire rate slider (shots per second)
+    do
+        local y = rowY
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 16)
+        label.Position = UDim2.new(0, 0, 0, y)
+        label.Text = "Fire Rate " .. math.floor(autoFireRate) .. "/s"
+        label.TextColor3 = Color3.fromRGB(190, 190, 195)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = content
+
+        local trackBg = Instance.new("Frame")
+        trackBg.Size = UDim2.new(1, -14, 0, 3)
+        trackBg.Position = UDim2.new(0, 0, 0, y + 22)
+        trackBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        trackBg.BorderSizePixel = 0
+        trackBg.Parent = content
+
+        local trackBgCorner = Instance.new("UICorner")
+        trackBgCorner.CornerRadius = UDim.new(0, 2)
+        trackBgCorner.Parent = trackBg
+
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(0, 0, 1, 0)
+        track.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+        track.BorderSizePixel = 0
+        track.Parent = trackBg
+
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(0, 2)
+        trackCorner.Parent = track
+
+        local thumb = Instance.new("TextButton")
+        thumb.Size = UDim2.new(0, 16, 0, 16)
+        thumb.Text = ""
+        thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        thumb.BorderSizePixel = 0
+        thumb.Parent = content
+
+        local thumbCorner = Instance.new("UICorner")
+        thumbCorner.CornerRadius = UDim.new(0, 8)
+        thumbCorner.Parent = thumb
+
+        local thumbStroke = Instance.new("UIStroke")
+        thumbStroke.Color = Color3.fromRGB(0, 180, 255)
+        thumbStroke.Thickness = 2
+        thumbStroke.Parent = thumb
+
+        local frMin, frMax = 1, 50
+        local frDefault = 15
+
+        local function updateFrSlider()
+            local trackWidth = trackBg.AbsoluteSize.X
+            if trackWidth == 0 then return end
+            local relX = (autoFireRate - frMin) / (frMax - frMin) * trackWidth
+            track.Size = UDim2.new(0, relX, 1, 0)
+            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
+            label.Text = "Fire Rate " .. math.floor(autoFireRate) .. "/s"
+        end
+
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+
+        local function setFrFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            autoFireRate = frMin + (frMax - frMin) * (relX / tWidth)
+            updateFrSlider()
+        end
+
+        updateFrSlider()
+
+        thumb.ZIndex = 3
+        local frDrag = false
+        thumb.MouseButton1Down:Connect(function() frDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setFrFromX(UserInputService:GetMouseLocation().X)
+            frDrag = true
+        end)
+        thumb.MouseButton2Click:Connect(function()
+            autoFireRate = frDefault
+            updateFrSlider()
+        end)
+
+        table.insert(sliderHandlers, function()
+            if not frDrag then return end
+            setFrFromX(UserInputService:GetMouseLocation().X)
+        end)
+
+        table.insert(sliderUpHandlers, function()
+            frDrag = false
+        end)
+    end
+
+    rowY = rowY + 45
+
     -- shared mouse handlers for panel drag + all sliders
     mouseMoveConn = UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
@@ -2316,6 +2433,15 @@ RunService.Heartbeat:Connect(function(dt)
                     t:AdjustSpeed(fastActionValue)
                 end
             end
+        end
+    end
+
+    if autoFireEnabled then
+        local now = tick()
+        if now - lastAutoFireTime >= (1 / autoFireRate) then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            lastAutoFireTime = now
         end
     end
 end)
