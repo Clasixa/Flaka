@@ -15,6 +15,7 @@ local alwaysHitEnabled = false
 local antiAimEnabled = false
 local speedHackEnabled = false
 local speedHackValue = 2
+local setSpeedHack
 local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
@@ -1324,7 +1325,7 @@ local function buildGUI()
     -- speed hack toggle
     rowY, speedToggleUpdate = addToggle(rowY, "Speed",
         function() return speedHackEnabled end,
-        setSpeedHack,
+        function(v) setSpeedHack(v) end,
         nil, nil
     )
 
@@ -1631,10 +1632,32 @@ local function buildGUI()
             if fovCircle then fovCircle.Radius = fovRadius end
         end
 
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+        thumb.ZIndex = 3
+
+        local function setAimFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            fovRadius = math.floor(rangeMin + (relX / tWidth) * (rangeMax - rangeMin))
+            updateSlider()
+        end
+
         updateSlider()
 
         local aimDrag = false
         thumb.MouseButton1Down:Connect(function() aimDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setAimFromX(UserInputService:GetMouseLocation().X)
+            aimDrag = true
+        end)
         thumb.MouseButton2Click:Connect(function()
             fovRadius = rangeDefault
             updateSlider()
@@ -1642,13 +1665,7 @@ local function buildGUI()
 
         table.insert(sliderHandlers, function()
             if not aimDrag then return end
-            local tLeft = trackBg.AbsolutePosition.X
-            local tWidth = trackBg.AbsoluteSize.X
-            if tWidth == 0 then return end
-            local mouseX = UserInputService:GetMouseLocation().X
-            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
-            fovRadius = math.floor(rangeMin + (relX / tWidth) * (rangeMax - rangeMin))
-            updateSlider()
+            setAimFromX(UserInputService:GetMouseLocation().X)
         end)
 
         table.insert(sliderUpHandlers, function()
@@ -1724,10 +1741,32 @@ local function buildGUI()
             if cam then cam.FieldOfView = cameraFov end
         end
 
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+        thumb.ZIndex = 3
+
+        local function setCamFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            cameraFov = math.floor(camMin + (camMax - camMin) * (relX / tWidth))
+            updateCamSlider()
+        end
+
         updateCamSlider()
 
         local camDrag = false
         thumb.MouseButton1Down:Connect(function() camDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setCamFromX(UserInputService:GetMouseLocation().X)
+            camDrag = true
+        end)
         thumb.MouseButton2Click:Connect(function()
             cameraFov = camDefault
             updateCamSlider()
@@ -1735,17 +1774,7 @@ local function buildGUI()
 
         table.insert(sliderHandlers, function()
             if not camDrag then return end
-            local tLeft = trackBg.AbsolutePosition.X
-            local tWidth = trackBg.AbsoluteSize.X
-            if tWidth == 0 then return end
-            local mouseX = UserInputService:GetMouseLocation().X
-            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
-            cameraFov = math.floor(camMin + (camMax - camMin) * (relX / tWidth))
-            track.Size = UDim2.new(0, relX, 1, 0)
-            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
-            label.Text = "Camera FOV " .. cameraFov
-            local cam = workspace.CurrentCamera
-            if cam then cam.FieldOfView = cameraFov end
+            setCamFromX(UserInputService:GetMouseLocation().X)
         end)
 
         table.insert(sliderUpHandlers, function()
@@ -1819,10 +1848,32 @@ local function buildGUI()
             label.Text = "Smoothness " .. math.floor(aimbotSmoothness * 100) .. "%"
         end
 
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+        thumb.ZIndex = 3
+
+        local function setSmFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            aimbotSmoothness = smMin + (smMax - smMin) * (relX / tWidth)
+            updateSmSlider()
+        end
+
         updateSmSlider()
 
         local smDrag = false
         thumb.MouseButton1Down:Connect(function() smDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setSmFromX(UserInputService:GetMouseLocation().X)
+            smDrag = true
+        end)
         thumb.MouseButton2Click:Connect(function()
             aimbotSmoothness = smDefault
             updateSmSlider()
@@ -1830,15 +1881,7 @@ local function buildGUI()
 
         table.insert(sliderHandlers, function()
             if not smDrag then return end
-            local tLeft = trackBg.AbsolutePosition.X
-            local tWidth = trackBg.AbsoluteSize.X
-            if tWidth == 0 then return end
-            local mouseX = UserInputService:GetMouseLocation().X
-            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
-            aimbotSmoothness = smMin + (smMax - smMin) * (relX / tWidth)
-            track.Size = UDim2.new(0, relX, 1, 0)
-            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
-            label.Text = "Smoothness " .. math.floor(aimbotSmoothness * 100) .. "%"
+            setSmFromX(UserInputService:GetMouseLocation().X)
         end)
 
         table.insert(sliderUpHandlers, function()
@@ -2082,8 +2125,8 @@ local function init()
     end
 end
 
--- Speed hack setter (module scope so the keybind in init() can call it too)
-local function setSpeedHack(v)
+-- Speed hack setter (forward-declared at top so GUI toggle + keybind can call it)
+function setSpeedHack(v)
     speedHackEnabled = v
     if not v and LocalPlayer and LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
