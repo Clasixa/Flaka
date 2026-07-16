@@ -49,6 +49,7 @@ local fastReloadEnabled = false
 local reloadRemotes = {}
 local reloadRemotesScanned = false
 local scanReloadRemotes
+local showToast
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -2476,22 +2477,56 @@ end)
 
 -- Scan the game for RemoteEvents whose name suggests reloading, so Fast Reload
 -- can spam them. Best-effort: names vary per game.
+-- On-screen toast (works on mobile where there is no F9 console)
+function showToast(msg)
+    if not gui then return end
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(0, 300, 0, 34)
+    t.Position = UDim2.new(0.5, -150, 0, 20)
+    t.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    t.BackgroundTransparency = 0.1
+    t.TextColor3 = Color3.fromRGB(0, 220, 255)
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 14
+    t.Text = msg
+    t.ZIndex = 50
+    t.Parent = gui
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = t
+    task.delay(4, function()
+        if t then t:Destroy() end
+    end)
+end
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 function scanReloadRemotes()
     reloadRemotes = {}
-    local roots = { ReplicatedStorage, workspace }
+    local allNames = {}
+    local roots = { ReplicatedStorage, workspace, game:GetService("Players").LocalPlayer }
     for _, root in ipairs(roots) do
-        for _, obj in ipairs(root:GetDescendants()) do
-            if obj:IsA("RemoteEvent") then
-                local n = string.lower(obj.Name)
-                if string.find(n, "reload") then
-                    table.insert(reloadRemotes, obj)
+        if root then
+            for _, obj in ipairs(root:GetDescendants()) do
+                if obj:IsA("RemoteEvent") then
+                    table.insert(allNames, obj.Name)
+                    local n = string.lower(obj.Name)
+                    if string.find(n, "reload") or string.find(n, "ammo")
+                        or string.find(n, "gun") or string.find(n, "weapon") then
+                        table.insert(reloadRemotes, obj)
+                    end
                 end
             end
         end
     end
     reloadRemotesScanned = true
-    warn("[FastReload] found " .. #reloadRemotes .. " reload remote(s)")
+    if #reloadRemotes > 0 then
+        showToast("Fast Reload: matched " .. #reloadRemotes .. " remote(s)")
+    else
+        -- show a few remote names so we can find the right one
+        local sample = table.concat(allNames, ", ")
+        if #sample > 120 then sample = string.sub(sample, 1, 120) .. "..." end
+        showToast("No reload remote. Remotes: " .. (sample == "" and "none" or sample))
+    end
 end
 
 -- Re-apply WalkSpeed the instant the game tries to reset it (many games force 16
