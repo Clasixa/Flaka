@@ -8,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 -- State
-local aimbotEnabled = true
+local aimbotEnabled = false
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
@@ -18,7 +18,7 @@ local speedHackValue = 2
 local setSpeedHack
 local fastActionEnabled = false
 local fastActionValue = 2
-local autoShootEnabled = true
+local autoShootEnabled = false
 local noRecoilEnabled = false
 local noSpreadEnabled = false
 local noclipEnabled = false
@@ -56,7 +56,7 @@ local spyCaptureCount = 0
 local spyEnabled = false
 local startShotSpy
 local rapidFireEnabled = true
-local rapidFireRate = 15
+local rapidFireRate = 60
 local lastRapidFireTime = 0
 local rapidShotId = 100
 local rapidFireIndex = 1
@@ -2318,7 +2318,7 @@ local function buildGUI()
         thumbStroke.Parent = thumb
 
         local arMin, arMax = 1, 60
-        local arDefault = 15
+        local arDefault = 60
 
         local function updateArSlider()
             local trackWidth = trackBg.AbsoluteSize.X
@@ -2589,7 +2589,8 @@ RunService.Heartbeat:Connect(function(dt)
                     if p ~= lp and p.Character then
                         local hum = p.Character:FindFirstChildOfClass("Humanoid")
                         local head = p.Character:FindFirstChild("Head")
-                        if hum and head and hum.Health > 0 then
+                        if hum and head and hum.Health > 0
+                            and (head.Position - myHead.Position).Magnitude <= 300 then
                             table.insert(targets, head)
                         end
                     end
