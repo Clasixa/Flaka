@@ -58,6 +58,7 @@ local startShotSpy
 local rapidFireEnabled = false
 local rapidFireRate = 15
 local lastRapidFireTime = 0
+local rapidShotId = 100
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -1398,6 +1399,13 @@ local function buildGUI()
         nil, nil
     )
 
+    -- rapid fire kill aura: spam ShootReplicate at nearest enemy head
+    rowY = addToggle(rowY, "Rapid Fire (aura)",
+        function() return rapidFireEnabled end,
+        function(v) rapidFireEnabled = v end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -2282,6 +2290,113 @@ local function buildGUI()
 
     rowY = rowY + 45
 
+    -- rapid fire rate slider (shots per second)
+    do
+        local y = rowY
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 16)
+        label.Position = UDim2.new(0, 0, 0, y)
+        label.Text = "Aura Rate " .. math.floor(rapidFireRate) .. "/s"
+        label.TextColor3 = Color3.fromRGB(190, 190, 195)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = content
+
+        local trackBg = Instance.new("Frame")
+        trackBg.Size = UDim2.new(1, -14, 0, 3)
+        trackBg.Position = UDim2.new(0, 0, 0, y + 22)
+        trackBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        trackBg.BorderSizePixel = 0
+        trackBg.Parent = content
+
+        local trackBgCorner = Instance.new("UICorner")
+        trackBgCorner.CornerRadius = UDim.new(0, 2)
+        trackBgCorner.Parent = trackBg
+
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(0, 0, 1, 0)
+        track.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+        track.BorderSizePixel = 0
+        track.Parent = trackBg
+
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(0, 2)
+        trackCorner.Parent = track
+
+        local thumb = Instance.new("TextButton")
+        thumb.Size = UDim2.new(0, 16, 0, 16)
+        thumb.Text = ""
+        thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        thumb.BorderSizePixel = 0
+        thumb.Parent = content
+
+        local thumbCorner = Instance.new("UICorner")
+        thumbCorner.CornerRadius = UDim.new(0, 8)
+        thumbCorner.Parent = thumb
+
+        local thumbStroke = Instance.new("UIStroke")
+        thumbStroke.Color = Color3.fromRGB(0, 180, 255)
+        thumbStroke.Thickness = 2
+        thumbStroke.Parent = thumb
+
+        local arMin, arMax = 1, 60
+        local arDefault = 15
+
+        local function updateArSlider()
+            local trackWidth = trackBg.AbsoluteSize.X
+            if trackWidth == 0 then return end
+            local relX = (rapidFireRate - arMin) / (arMax - arMin) * trackWidth
+            track.Size = UDim2.new(0, relX, 1, 0)
+            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
+            label.Text = "Aura Rate " .. math.floor(rapidFireRate) .. "/s"
+        end
+
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+
+        local function setArFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            rapidFireRate = arMin + (arMax - arMin) * (relX / tWidth)
+            updateArSlider()
+        end
+
+        updateArSlider()
+
+        thumb.ZIndex = 3
+        local arDrag = false
+        thumb.MouseButton1Down:Connect(function() arDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setArFromX(UserInputService:GetMouseLocation().X)
+            arDrag = true
+        end)
+        thumb.MouseButton2Click:Connect(function()
+            rapidFireRate = arDefault
+            updateArSlider()
+        end)
+
+        table.insert(sliderHandlers, function()
+            if not arDrag then return end
+            setArFromX(UserInputService:GetMouseLocation().X)
+        end)
+
+        table.insert(sliderUpHandlers, function()
+            arDrag = false
+        end)
+    end
+
+    rowY = rowY + 45
+
     -- shared mouse handlers for panel drag + all sliders
     mouseMoveConn = UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
@@ -2492,6 +2607,54 @@ RunService.Heartbeat:Connect(function(dt)
                 pcall(function()
                     rem:FireServer()
                 end)
+            end
+        end
+    end
+
+    if rapidFireEnabled then
+        local now = tick()
+        if now - lastRapidFireTime >= (1 / rapidFireRate) then
+            local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+            local shootRem = remotesFolder and remotesFolder:FindFirstChild("ShootReplicate")
+            local lp = Players.LocalPlayer
+            local myChar = lp and lp.Character
+            local myHead = myChar and myChar:FindFirstChild("Head")
+            if shootRem and myHead then
+                -- find nearest alive enemy head
+                local bestHead, bestDist
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= lp and p.Character then
+                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                        local head = p.Character:FindFirstChild("Head")
+                        if hum and head and hum.Health > 0 then
+                            local d = (head.Position - myHead.Position).Magnitude
+                            if not bestDist or d < bestDist then
+                                bestDist, bestHead = d, head
+                            end
+                        end
+                    end
+                end
+                if bestHead then
+                    rapidShotId = rapidShotId + 1
+                    local payload = {
+                        hitPos = bestHead.Position,
+                        to = bestHead.Position,
+                        origin = myHead.Position,
+                        id = rapidShotId,
+                        mode = "single",
+                        hitNormal = Vector3.new(0, 1, 0),
+                        effects = { Frost = 0, Ricochet = 0, Barrage = 0 },
+                        ownerUserId = lp.UserId,
+                        isCharacterHit = true,
+                        kind = "bullet",
+                        hitInstance = bestHead,
+                        isADS = false,
+                    }
+                    pcall(function()
+                        shootRem:FireServer(payload)
+                    end)
+                    lastRapidFireTime = now
+                end
             end
         end
     end
