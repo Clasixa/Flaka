@@ -2128,12 +2128,13 @@ end
 -- Speed hack setter (forward-declared at top so GUI toggle + keybind can call it)
 function setSpeedHack(v)
     speedHackEnabled = v
-    if not v and LocalPlayer and LocalPlayer.Character then
+    if LocalPlayer and LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum then
-            hum.WalkSpeed = 16
-            for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
-                t:AdjustSpeed(1)
+            if v then
+                hum.WalkSpeed = 16 * speedHackValue
+            else
+                hum.WalkSpeed = 16
             end
         end
     end
@@ -2156,26 +2157,48 @@ RunService.Heartbeat:Connect(function()
     if speedHackEnabled then
         local hum = char:FindFirstChildOfClass("Humanoid")
         if hum then
+            local target = 16 * speedHackValue
             local st = hum:GetState()
             -- don't override WalkSpeed while sliding/crouching, or the game's
             -- slide mechanic breaks (it sets its own speed/state)
             if st ~= Enum.HumanoidStateType.Sliding and st ~= Enum.HumanoidStateType.Crouching then
-                hum.WalkSpeed = 16 * speedHackValue
-            end
-            -- speed up reload / action animations too
-            for _, t in ipairs(hum:GetPlayingAnimationTracks()) do
-                t:AdjustSpeed(speedHackValue)
+                if hum.WalkSpeed ~= target then
+                    hum.WalkSpeed = target
+                end
             end
         end
     end
 end)
 
+-- Re-apply WalkSpeed the instant the game tries to reset it (many games force 16
+-- every frame). Rehooks on each new character.
+local wsConn
+local function hookWalkSpeed(char)
+    if wsConn then wsConn:Disconnect() end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+    wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+        if not speedHackEnabled then return end
+        local st = hum:GetState()
+        if st == Enum.HumanoidStateType.Sliding or st == Enum.HumanoidStateType.Crouching then return end
+        local target = 16 * speedHackValue
+        if hum.WalkSpeed ~= target then
+            hum.WalkSpeed = target
+        end
+    end)
+end
+
 -- initial run
 init()
+
+if LocalPlayer and LocalPlayer.Character then
+    hookWalkSpeed(LocalPlayer.Character)
+end
 
 -- rebuild GUI after respawn
 if LocalPlayer then
     LocalPlayer.CharacterAdded:Connect(function()
+        hookWalkSpeed(LocalPlayer.Character)
         task.wait(1)
         buildGUI()
     end)
