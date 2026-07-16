@@ -52,6 +52,7 @@ local scanReloadRemotes
 local showToast
 local spyInstalled = false
 local capturedShotArgs = nil
+local spyCaptureCount = 0
 local spyEnabled = false
 local startShotSpy
 local rapidFireEnabled = false
@@ -1390,6 +1391,7 @@ local function buildGUI()
             spyEnabled = v
             if v then
                 capturedShotArgs = nil
+                spyCaptureCount = 0
                 startShotSpy()
             end
         end,
@@ -2629,15 +2631,15 @@ end
 function startShotSpy()
     if spyInstalled then
         capturedShotArgs = nil
-        showToast("[Spy] re-armed - fire your gun ONCE", true)
+        spyCaptureCount = 0
+        showToast("[Spy] re-armed - fire your gun a few times", true)
         return
     end
 
-    -- ignore noisy remotes that fire constantly so they don't steal the capture
-    local ignore = {
-        Sound = true, Effect = true, ParkourState = true, CrosshairSync = true,
-        FOVSync = true, PingHeartbeat = true, MapPing = true, State = true,
-        AbilityEffectSync = true, Notification = true,
+    -- only capture the actual shoot remotes; everything else is noise
+    local wanted = {
+        SpawnBullet = true, ShootReplicate = true, Hit = true, ReportHit = true,
+        HitReplicate = true, ConsumeHit = true,
     }
 
     if not (getrawmetatable and setreadonly and newcclosure and getnamecallmethod) then
@@ -2651,19 +2653,27 @@ function startShotSpy()
         setreadonly(mt, false)
         mt.__namecall = newcclosure(function(self, ...)
             local method = getnamecallmethod()
-            if spyEnabled and not capturedShotArgs
+            if spyEnabled
                 and (method == "FireServer" or method == "fireServer")
                 and typeof(self) == "Instance"
                 and (self:IsA("RemoteEvent"))
-                and not ignore[self.Name] then
+                and wanted[self.Name] then
                 local args = { ... }
-                local lines = { "[Fired: " .. self:GetFullName() .. "]",
-                    "method = " .. method, "argcount = " .. #args }
+                local lines = { "[Fired: " .. self.Name .. "]",
+                    "argcount = " .. #args }
                 for i, a in ipairs(args) do
                     table.insert(lines, "arg" .. i .. " = " .. serializeArg(a))
                 end
-                capturedShotArgs = table.concat(lines, "\n")
-                showToast(capturedShotArgs, true, capturedShotArgs)
+                local block = table.concat(lines, "\n")
+                if capturedShotArgs then
+                    capturedShotArgs = capturedShotArgs .. "\n\n" .. block
+                else
+                    capturedShotArgs = block
+                end
+                spyCaptureCount = (spyCaptureCount or 0) + 1
+                if spyCaptureCount <= 6 then
+                    showToast(capturedShotArgs, true, capturedShotArgs)
+                end
             end
             return oldNamecall(self, ...)
         end)
