@@ -2156,15 +2156,21 @@ RunService.Heartbeat:Connect(function()
 
     if speedHackEnabled then
         local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then
+            -- Try WalkSpeed first (works on standard games)
             local target = 16 * speedHackValue
-            local st = hum:GetState()
-            -- don't override WalkSpeed while sliding/crouching, or the game's
-            -- slide mechanic breaks (it sets its own speed/state)
-            if st ~= Enum.HumanoidStateType.Sliding and st ~= Enum.HumanoidStateType.Crouching then
-                if hum.WalkSpeed ~= target then
-                    hum.WalkSpeed = target
-                end
+            if hum.WalkSpeed ~= target then
+                hum.WalkSpeed = target
+            end
+            -- Velocity boost: works even when the game overrides WalkSpeed with a
+            -- custom controller. Only push while the player is actually moving,
+            -- and preserve vertical velocity so gravity/jumps still work.
+            local dir = hum.MoveDirection
+            if dir.Magnitude > 0 then
+                local baseSpeed = 16
+                local newVel = dir * baseSpeed * speedHackValue
+                hrp.AssemblyLinearVelocity = Vector3.new(newVel.X, hrp.AssemblyLinearVelocity.Y, newVel.Z)
             end
         end
     end
@@ -2179,8 +2185,6 @@ local function hookWalkSpeed(char)
     if not hum then return end
     wsConn = hum:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
         if not speedHackEnabled then return end
-        local st = hum:GetState()
-        if st == Enum.HumanoidStateType.Sliding or st == Enum.HumanoidStateType.Crouching then return end
         local target = 16 * speedHackValue
         if hum.WalkSpeed ~= target then
             hum.WalkSpeed = target
