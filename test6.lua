@@ -1115,8 +1115,14 @@ local function buildGUI()
             TweenService:Create(fill, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = UDim2.new(0, on and 32 or 0, 1, -4) }):Play()
         end
 
-        row.Active = true
-        row.MouseButton1Down:Connect(function()
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 1, 0)
+        btn.BackgroundTransparency = 1
+        btn.Text = ""
+        btn.ZIndex = 5
+        btn.Parent = row
+
+        btn.MouseButton1Click:Connect(function()
             local wasOn = getState()
             setState(not wasOn)
             update()
@@ -1912,7 +1918,7 @@ local function buildGUI()
         hit.Position = UDim2.new(0, 0, 0, y + 6)
         hit.BackgroundTransparency = 1
         hit.Text = ""
-        hit.ZIndex = -1
+        hit.ZIndex = 1
         hit.Parent = content
 
         local function setSpFromX(mouseX)
@@ -1926,6 +1932,7 @@ local function buildGUI()
 
         updateSpSlider()
 
+        thumb.ZIndex = 3
         local spDrag = false
         thumb.MouseButton1Down:Connect(function() spDrag = true end)
         hit.MouseButton1Down:Connect(function()
