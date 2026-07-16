@@ -2574,45 +2574,46 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     if rapidFireEnabled then
-        local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-        local shootRem = remotesFolder and remotesFolder:FindFirstChild("ShootReplicate")
-        local hitRem = remotesFolder and remotesFolder:FindFirstChild("Hit")
-        local reportHitRem = remotesFolder and remotesFolder:FindFirstChild("ReportHit")
-        local lp = Players.LocalPlayer
-        local myChar = lp and lp.Character
-        local myHead = myChar and myChar:FindFirstChild("Head")
-        if shootRem and myHead then
-            -- fire at EVERY alive enemy head this frame, any distance = kill all
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= lp and p.Character then
-                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                    local head = p.Character:FindFirstChild("Head")
-                    if hum and head and hum.Health > 0 then
-                        rapidShotId = rapidShotId + 1
-                        local origin = head.Position + Vector3.new(0, 0.1, 0)
-                        local payload = {
-                            hitPos = head.Position,
-                            to = head.Position,
-                            origin = origin,
-                            id = rapidShotId,
-                            mode = "single",
-                            hitNormal = Vector3.new(0, 1, 0),
-                            effects = { Frost = 0, Ricochet = 0, Barrage = 0 },
-                            ownerUserId = lp.UserId,
-                            isCharacterHit = true,
-                            kind = "bullet",
-                            hitInstance = head,
-                            isADS = false,
-                        }
-                        pcall(function() shootRem:FireServer(payload) end)
-                        -- also try dedicated damage remotes if present
-                        if hitRem then
-                            pcall(function() hitRem:FireServer(payload) end)
-                        end
-                        if reportHitRem then
-                            pcall(function() reportHitRem:FireServer(payload) end)
+        local now = tick()
+        if now - lastRapidFireTime >= (1 / rapidFireRate) then
+            local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+            local shootRem = remotesFolder and remotesFolder:FindFirstChild("ShootReplicate")
+            local lp = Players.LocalPlayer
+            local myChar = lp and lp.Character
+            local myHead = myChar and myChar:FindFirstChild("Head")
+            if shootRem and myHead then
+                -- nearest alive enemy head (valid origin = your head, rate-limited)
+                local bestHead, bestDist
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= lp and p.Character then
+                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                        local head = p.Character:FindFirstChild("Head")
+                        if hum and head and hum.Health > 0 then
+                            local d = (head.Position - myHead.Position).Magnitude
+                            if not bestDist or d < bestDist then
+                                bestDist, bestHead = d, head
+                            end
                         end
                     end
+                end
+                if bestHead then
+                    rapidShotId = rapidShotId + 1
+                    local payload = {
+                        hitPos = bestHead.Position,
+                        to = bestHead.Position,
+                        origin = myHead.Position,
+                        id = rapidShotId,
+                        mode = "single",
+                        hitNormal = Vector3.new(0, 1, 0),
+                        effects = { Frost = 0, Ricochet = 0, Barrage = 0 },
+                        ownerUserId = lp.UserId,
+                        isCharacterHit = true,
+                        kind = "bullet",
+                        hitInstance = bestHead,
+                        isADS = false,
+                    }
+                    pcall(function() shootRem:FireServer(payload) end)
+                    lastRapidFireTime = now
                 end
             end
         end
