@@ -2590,7 +2590,7 @@ RunService.Heartbeat:Connect(function(dt)
                         local hum = p.Character:FindFirstChildOfClass("Humanoid")
                         local head = p.Character:FindFirstChild("Head")
                         if hum and head and hum.Health > 0
-                            and (head.Position - myHead.Position).Magnitude <= 300 then
+                            and (head.Position - myHead.Position).Magnitude <= 500 then
                             table.insert(targets, head)
                         end
                     end
