@@ -50,6 +50,13 @@ local reloadRemotes = {}
 local reloadRemotesScanned = false
 local scanReloadRemotes
 local showToast
+local spyInstalled = false
+local capturedShotArgs = nil
+local spyEnabled = false
+local startShotSpy
+local rapidFireEnabled = false
+local rapidFireRate = 15
+local lastRapidFireTime = 0
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -1376,6 +1383,19 @@ local function buildGUI()
         nil, nil
     )
 
+    -- remote spy: capture the next shot's arguments (turn on, then fire once)
+    rowY = addToggle(rowY, "Shot Spy (fire once)",
+        function() return spyEnabled end,
+        function(v)
+            spyEnabled = v
+            if v then
+                capturedShotArgs = nil
+                startShotSpy()
+            end
+        end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -2579,23 +2599,116 @@ function showToast(msg, persistent, copyText)
 end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Serialize a Luau value to a readable string for the spy output.
+local function serializeArg(v)
+    local ty = typeof(v)
+    if ty == "Instance" then
+        return "Instance<" .. v.ClassName .. ">(" .. v:GetFullName() .. ")"
+    elseif ty == "Vector3" then
+        return string.format("Vector3(%.3f, %.3f, %.3f)", v.X, v.Y, v.Z)
+    elseif ty == "CFrame" then
+        local x, y, z = v.Position.X, v.Position.Y, v.Position.Z
+        return string.format("CFrame@(%.2f, %.2f, %.2f)", x, y, z)
+    elseif ty == "table" then
+        local parts = {}
+        for k, val in pairs(v) do
+            table.insert(parts, tostring(k) .. "=" .. serializeArg(val))
+        end
+        return "{" .. table.concat(parts, ", ") .. "}"
+    elseif ty == "string" then
+        return "\"" .. v .. "\""
+    else
+        return ty .. "(" .. tostring(v) .. ")"
+    end
+end
+
+-- Hook the shoot remotes so the next real shot captures its arguments. Uses
+-- hookmetamethod (Delta) with a fallback. Only captures once, then shows a
+-- copyable toast so we can replicate the call for fast fire.
+function startShotSpy()
+    if spyInstalled then
+        capturedShotArgs = nil
+        showToast("[Spy] re-armed - fire your gun ONCE", true)
+        return
+    end
+
+    -- ignore noisy remotes that fire constantly so they don't steal the capture
+    local ignore = {
+        Sound = true, Effect = true, ParkourState = true, CrosshairSync = true,
+        FOVSync = true, PingHeartbeat = true, MapPing = true, State = true,
+        AbilityEffectSync = true, Notification = true,
+    }
+
+    if not (getrawmetatable and setreadonly and newcclosure and getnamecallmethod) then
+        showToast("[Spy] Delta missing hook APIs (getrawmetatable/newcclosure)", true)
+        return
+    end
+
+    local ok, err = pcall(function()
+        local mt = getrawmetatable(game)
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            if spyEnabled and not capturedShotArgs
+                and (method == "FireServer" or method == "fireServer")
+                and typeof(self) == "Instance"
+                and (self:IsA("RemoteEvent"))
+                and not ignore[self.Name] then
+                local args = { ... }
+                local lines = { "[Fired: " .. self:GetFullName() .. "]",
+                    "method = " .. method, "argcount = " .. #args }
+                for i, a in ipairs(args) do
+                    table.insert(lines, "arg" .. i .. " = " .. serializeArg(a))
+                end
+                capturedShotArgs = table.concat(lines, "\n")
+                showToast(capturedShotArgs, true, capturedShotArgs)
+            end
+            return oldNamecall(self, ...)
+        end)
+        setreadonly(mt, true)
+    end)
+
+    if ok then
+        spyInstalled = true
+        showToast("[Spy] armed! Now FIRE your gun ONCE.\n(captures the first remote fired)", true)
+    else
+        showToast("[Spy] hook failed: " .. tostring(err), true)
+    end
+end
+
 function scanReloadRemotes()
     reloadRemotes = {}
-    local allNames = {}
     local allPaths = {}
-    local roots = { ReplicatedStorage, workspace, game:GetService("Players").LocalPlayer }
+    local kw = { "reload", "ammo", "cooldown", "firerate", "fire_rate", "f#rate", "rpm",
+        "clip", "mag", "shoot", "recoil", "delay" }
+    local function matches(name)
+        local n = string.lower(name)
+        for _, k in ipairs(kw) do
+            if string.find(n, k, 1, true) then return true end
+        end
+        return false
+    end
+
+    -- Reload/fire cooldown in this game is client-side (no reload remote), so we
+    -- hunt for Value objects + attributes named like reload/ammo/cooldown on the
+    -- character, tools, and player. Those are what we can override locally.
+    local lp = game:GetService("Players").LocalPlayer
+    local roots = { lp, lp and lp.Character, ReplicatedStorage }
     for _, root in ipairs(roots) do
         if root then
             for _, obj in ipairs(root:GetDescendants()) do
-                if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                    table.insert(allNames, obj.Name)
-                    table.insert(allPaths, obj.ClassName .. ": " .. obj:GetFullName())
-                    local n = string.lower(obj.Name)
-                    if string.find(n, "reload") or string.find(n, "ammo")
-                        or string.find(n, "gun") or string.find(n, "weapon") then
-                        if obj:IsA("RemoteEvent") then
-                            table.insert(reloadRemotes, obj)
-                        end
+                if obj:IsA("ValueBase") and matches(obj.Name) then
+                    table.insert(allPaths, obj.ClassName .. " = " .. tostring(obj.Value)
+                        .. ": " .. obj:GetFullName())
+                    reloadRemotes = reloadRemotes
+                end
+                -- attributes
+                for attrName, attrVal in pairs(obj:GetAttributes()) do
+                    if matches(attrName) then
+                        table.insert(allPaths, "ATTR[" .. attrName .. "]=" .. tostring(attrVal)
+                            .. ": " .. obj:GetFullName())
                     end
                 end
             end
@@ -2614,18 +2727,11 @@ function scanReloadRemotes()
     end
     print("[FastReload] ============================")
 
-    local copyText = table.concat(allPaths, "\n")
-    local header
-    if #reloadRemotes > 0 then
-        local names = {}
-        for _, r in ipairs(reloadRemotes) do table.insert(names, r.Name) end
-        header = "MATCHED " .. #reloadRemotes .. " reload remote(s):\n" .. table.concat(names, "\n")
-            .. "\n\nTap Copy to get ALL " .. #allPaths .. " remotes."
-    else
-        header = "No reload-named remote.\nFound " .. #allPaths
-            .. " remotes total.\nTap Copy to get the full list."
-    end
-    -- persistent, with a Copy button for the full remote list
+    local copyText = #allPaths == 0 and "(no ammo/reload/cooldown values or attributes found)"
+        or table.concat(allPaths, "\n")
+    local header = "Scanned character/tools/player for ammo/reload/cooldown values.\n"
+        .. "Found " .. #allPaths .. " candidate(s).\nTap Copy for the list."
+    -- persistent, with a Copy button for the candidate list
     showToast("[Fast Reload]\n" .. header, true, copyText)
 end
 
