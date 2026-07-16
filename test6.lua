@@ -2478,17 +2478,41 @@ end)
 -- Scan the game for RemoteEvents whose name suggests reloading, so Fast Reload
 -- can spam them. Best-effort: names vary per game.
 -- On-screen toast (works on mobile where there is no F9 console).
--- Persistent: stays until dismissed by tapping it.
+-- Persistent toasts stay until closed, and can carry a copyable payload.
 local activeToast
-function showToast(msg, persistent)
+function showToast(msg, persistent, copyText)
     if not gui then return end
     if activeToast then activeToast:Destroy() end
 
-    local t = Instance.new("TextButton")
-    t.Size = UDim2.new(0, 460, 0, 160)
-    t.Position = UDim2.new(0.5, -230, 0, 20)
-    t.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    t.BackgroundTransparency = 0.05
+    local box = Instance.new("Frame")
+    box.Size = UDim2.new(0, 470, 0, 0)
+    box.Position = UDim2.new(0.5, -235, 0, 20)
+    box.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    box.BackgroundTransparency = 0.05
+    box.AutomaticSize = Enum.AutomaticSize.Y
+    box.ZIndex = 50
+    box.Parent = gui
+    activeToast = box
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = box
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.Parent = box
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 6)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = box
+
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, 0, 0, 0)
+    t.BackgroundTransparency = 1
     t.TextColor3 = Color3.fromRGB(0, 220, 255)
     t.Font = Enum.Font.GothamBold
     t.TextSize = 15
@@ -2497,31 +2521,59 @@ function showToast(msg, persistent)
     t.TextXAlignment = Enum.TextXAlignment.Left
     t.TextYAlignment = Enum.TextYAlignment.Top
     t.AutomaticSize = Enum.AutomaticSize.Y
-    t.ZIndex = 50
-    t.Parent = gui
-    activeToast = t
+    t.ZIndex = 51
+    t.LayoutOrder = 1
+    t.Parent = box
 
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 10)
-    pad.PaddingRight = UDim.new(0, 10)
-    pad.PaddingTop = UDim.new(0, 8)
-    pad.PaddingBottom = UDim.new(0, 8)
-    pad.Parent = t
+    local function mkBtn(text, order, color, cb)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, 0, 0, 32)
+        b.BackgroundColor3 = color
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 14
+        b.Text = text
+        b.ZIndex = 51
+        b.LayoutOrder = order
+        b.Parent = box
+        local bc = Instance.new("UICorner")
+        bc.CornerRadius = UDim.new(0, 5)
+        bc.Parent = b
+        b.MouseButton1Click:Connect(cb)
+        return b
+    end
 
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = t
+    if copyText then
+        local copyBtn
+        copyBtn = mkBtn("Copy to clipboard", 2, Color3.fromRGB(0, 140, 200), function()
+            local ok = pcall(function()
+                if setclipboard then
+                    setclipboard(copyText)
+                elseif toclipboard then
+                    toclipboard(copyText)
+                else
+                    error("no clipboard function")
+                end
+            end)
+            -- also try to save a file as backup
+            pcall(function()
+                if writefile then
+                    writefile("md_remotes.txt", copyText)
+                end
+            end)
+            copyBtn.Text = ok and "Copied! (also saved md_remotes.txt)" or "Saved to md_remotes.txt"
+        end)
+    end
 
-    -- tap the toast to dismiss it
-    t.MouseButton1Click:Connect(function()
-        if t then t:Destroy() end
-        if activeToast == t then activeToast = nil end
+    mkBtn("Close", 3, Color3.fromRGB(80, 40, 45), function()
+        if box then box:Destroy() end
+        if activeToast == box then activeToast = nil end
     end)
 
     if not persistent then
         task.delay(5, function()
-            if t and t.Parent then t:Destroy() end
-            if activeToast == t then activeToast = nil end
+            if box and box.Parent then box:Destroy() end
+            if activeToast == box then activeToast = nil end
         end)
     end
 end
@@ -2530,16 +2582,20 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 function scanReloadRemotes()
     reloadRemotes = {}
     local allNames = {}
+    local allPaths = {}
     local roots = { ReplicatedStorage, workspace, game:GetService("Players").LocalPlayer }
     for _, root in ipairs(roots) do
         if root then
             for _, obj in ipairs(root:GetDescendants()) do
-                if obj:IsA("RemoteEvent") then
+                if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                     table.insert(allNames, obj.Name)
+                    table.insert(allPaths, obj.ClassName .. ": " .. obj:GetFullName())
                     local n = string.lower(obj.Name)
                     if string.find(n, "reload") or string.find(n, "ammo")
                         or string.find(n, "gun") or string.find(n, "weapon") then
-                        table.insert(reloadRemotes, obj)
+                        if obj:IsA("RemoteEvent") then
+                            table.insert(reloadRemotes, obj)
+                        end
                     end
                 end
             end
@@ -2558,20 +2614,19 @@ function scanReloadRemotes()
     end
     print("[FastReload] ============================")
 
+    local copyText = table.concat(allPaths, "\n")
     local header
     if #reloadRemotes > 0 then
-        header = "MATCHED " .. #reloadRemotes .. " reload remote(s):\n"
-            .. table.concat((function()
-                local t = {}
-                for _, r in ipairs(reloadRemotes) do table.insert(t, r.Name) end
-                return t
-            end)(), "\n")
+        local names = {}
+        for _, r in ipairs(reloadRemotes) do table.insert(names, r.Name) end
+        header = "MATCHED " .. #reloadRemotes .. " reload remote(s):\n" .. table.concat(names, "\n")
+            .. "\n\nTap Copy to get ALL " .. #allPaths .. " remotes."
     else
-        header = "NO reload remote matched.\nAll RemoteEvents (" .. #allNames .. "):\n"
-            .. (#allNames == 0 and "(none found)" or table.concat(allNames, "\n"))
+        header = "No reload-named remote.\nFound " .. #allPaths
+            .. " remotes total.\nTap Copy to get the full list."
     end
-    -- persistent so you can read it; tap the box to close
-    showToast("[Fast Reload] (tap to close)\n" .. header, true)
+    -- persistent, with a Copy button for the full remote list
+    showToast("[Fast Reload]\n" .. header, true, copyText)
 end
 
 -- Re-apply WalkSpeed the instant the game tries to reset it (many games force 16
