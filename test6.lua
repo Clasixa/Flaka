@@ -2142,7 +2142,7 @@ end
 
 -- Defense: Godmode (health lock) + Anti-Aim (jitter to break enemy aimbot locks).
 -- Runs once, outside buildGUI, so it isn't duplicated on respawn.
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(dt)
     if not LocalPlayer or not LocalPlayer.Character then return end
     local char = LocalPlayer.Character
 
@@ -2158,19 +2158,24 @@ RunService.Heartbeat:Connect(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hum and hrp then
-            -- Try WalkSpeed first (works on standard games)
+            -- 1) WalkSpeed (standard games)
             local target = 16 * speedHackValue
             if hum.WalkSpeed ~= target then
                 hum.WalkSpeed = target
             end
-            -- Velocity boost: works even when the game overrides WalkSpeed with a
-            -- custom controller. Only push while the player is actually moving,
-            -- and preserve vertical velocity so gravity/jumps still work.
+
             local dir = hum.MoveDirection
             if dir.Magnitude > 0 then
-                local baseSpeed = 16
-                local newVel = dir * baseSpeed * speedHackValue
+                -- 2) Velocity push (physics-based controllers)
+                local newVel = dir * 16 * speedHackValue
                 hrp.AssemblyLinearVelocity = Vector3.new(newVel.X, hrp.AssemblyLinearVelocity.Y, newVel.Z)
+
+                -- 3) CFrame nudge: forcibly move the root each frame in the move
+                -- direction. Works even when the game controls position via CFrame.
+                -- Extra distance = base 16 studs/s times (multiplier - 1), scaled by
+                -- frame time so it's framerate-independent.
+                local extra = dir * 16 * (speedHackValue - 1) * dt
+                hrp.CFrame = hrp.CFrame + extra
             end
         end
     end
