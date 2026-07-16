@@ -2477,26 +2477,53 @@ end)
 
 -- Scan the game for RemoteEvents whose name suggests reloading, so Fast Reload
 -- can spam them. Best-effort: names vary per game.
--- On-screen toast (works on mobile where there is no F9 console)
-function showToast(msg)
+-- On-screen toast (works on mobile where there is no F9 console).
+-- Persistent: stays until dismissed by tapping it.
+local activeToast
+function showToast(msg, persistent)
     if not gui then return end
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.new(0, 300, 0, 34)
-    t.Position = UDim2.new(0.5, -150, 0, 20)
+    if activeToast then activeToast:Destroy() end
+
+    local t = Instance.new("TextButton")
+    t.Size = UDim2.new(0, 460, 0, 160)
+    t.Position = UDim2.new(0.5, -230, 0, 20)
     t.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    t.BackgroundTransparency = 0.1
+    t.BackgroundTransparency = 0.05
     t.TextColor3 = Color3.fromRGB(0, 220, 255)
     t.Font = Enum.Font.GothamBold
-    t.TextSize = 14
+    t.TextSize = 15
     t.Text = msg
+    t.TextWrapped = true
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.TextYAlignment = Enum.TextYAlignment.Top
+    t.AutomaticSize = Enum.AutomaticSize.Y
     t.ZIndex = 50
     t.Parent = gui
+    activeToast = t
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.Parent = t
+
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 6)
     c.Parent = t
-    task.delay(4, function()
+
+    -- tap the toast to dismiss it
+    t.MouseButton1Click:Connect(function()
         if t then t:Destroy() end
+        if activeToast == t then activeToast = nil end
     end)
+
+    if not persistent then
+        task.delay(5, function()
+            if t and t.Parent then t:Destroy() end
+            if activeToast == t then activeToast = nil end
+        end)
+    end
 end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2531,11 +2558,20 @@ function scanReloadRemotes()
     end
     print("[FastReload] ============================")
 
+    local header
     if #reloadRemotes > 0 then
-        showToast("Fast Reload: matched " .. #reloadRemotes .. " remote(s) - see console")
+        header = "MATCHED " .. #reloadRemotes .. " reload remote(s):\n"
+            .. table.concat((function()
+                local t = {}
+                for _, r in ipairs(reloadRemotes) do table.insert(t, r.Name) end
+                return t
+            end)(), "\n")
     else
-        showToast("No reload remote - check Delta console for full list")
+        header = "NO reload remote matched.\nAll RemoteEvents (" .. #allNames .. "):\n"
+            .. (#allNames == 0 and "(none found)" or table.concat(allNames, "\n"))
     end
+    -- persistent so you can read it; tap the box to close
+    showToast("[Fast Reload] (tap to close)\n" .. header, true)
 end
 
 -- Re-apply WalkSpeed the instant the game tries to reset it (many games force 16
