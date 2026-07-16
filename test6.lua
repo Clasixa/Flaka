@@ -59,6 +59,7 @@ local rapidFireEnabled = true
 local rapidFireRate = 15
 local lastRapidFireTime = 0
 local rapidShotId = 100
+local rapidFireIndex = 1
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -2582,25 +2583,25 @@ RunService.Heartbeat:Connect(function(dt)
             local myChar = lp and lp.Character
             local myHead = myChar and myChar:FindFirstChild("Head")
             if shootRem and myHead then
-                -- nearest alive enemy head (valid origin = your head, rate-limited)
-                local bestHead, bestDist
+                -- collect all alive enemy heads, then cycle through them (round-robin)
+                local targets = {}
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p ~= lp and p.Character then
                         local hum = p.Character:FindFirstChildOfClass("Humanoid")
                         local head = p.Character:FindFirstChild("Head")
                         if hum and head and hum.Health > 0 then
-                            local d = (head.Position - myHead.Position).Magnitude
-                            if not bestDist or d < bestDist then
-                                bestDist, bestHead = d, head
-                            end
+                            table.insert(targets, head)
                         end
                     end
                 end
-                if bestHead then
+                if #targets > 0 then
+                    if rapidFireIndex > #targets then rapidFireIndex = 1 end
+                    local head = targets[rapidFireIndex]
+                    rapidFireIndex = rapidFireIndex + 1
                     rapidShotId = rapidShotId + 1
                     local payload = {
-                        hitPos = bestHead.Position,
-                        to = bestHead.Position,
+                        hitPos = head.Position,
+                        to = head.Position,
                         origin = myHead.Position,
                         id = rapidShotId,
                         mode = "single",
@@ -2609,7 +2610,7 @@ RunService.Heartbeat:Connect(function(dt)
                         ownerUserId = lp.UserId,
                         isCharacterHit = true,
                         kind = "bullet",
-                        hitInstance = bestHead,
+                        hitInstance = head,
                         isADS = false,
                     }
                     pcall(function() shootRem:FireServer(payload) end)
