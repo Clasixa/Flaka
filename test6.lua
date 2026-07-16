@@ -55,7 +55,7 @@ local capturedShotArgs = nil
 local spyCaptureCount = 0
 local spyEnabled = false
 local startShotSpy
-local rapidFireEnabled = false
+local rapidFireEnabled = true
 local rapidFireRate = 15
 local lastRapidFireTime = 0
 local rapidShotId = 100
@@ -1373,33 +1373,7 @@ local function buildGUI()
         nil, nil
     )
 
-    -- fast reload (experimental: spam reload remotes)
-    rowY = addToggle(rowY, "Fast Reload (exp)",
-        function() return fastReloadEnabled end,
-        function(v)
-            fastReloadEnabled = v
-            if v and not reloadRemotesScanned then
-                scanReloadRemotes()
-            end
-        end,
-        nil, nil
-    )
-
-    -- remote spy: capture the next shot's arguments (turn on, then fire once)
-    rowY = addToggle(rowY, "Shot Spy (fire once)",
-        function() return spyEnabled end,
-        function(v)
-            spyEnabled = v
-            if v then
-                capturedShotArgs = nil
-                spyCaptureCount = 0
-                startShotSpy()
-            end
-        end,
-        nil, nil
-    )
-
-    -- rapid fire kill aura: spam ShootReplicate at nearest enemy head
+    -- rapid fire kill aura: instant-kill ALL enemies via ShootReplicate headshots
     rowY = addToggle(rowY, "Rapid Fire (aura)",
         function() return rapidFireEnabled end,
         function(v) rapidFireEnabled = v end,
@@ -2599,61 +2573,46 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    if fastReloadEnabled then
-        -- Spam any reload-named RemoteEvents to try to make the server finish the
-        -- reload cooldown early. This is experimental: the server may ignore it.
-        for _, rem in ipairs(reloadRemotes) do
-            if rem and rem.Parent then
-                pcall(function()
-                    rem:FireServer()
-                end)
-            end
-        end
-    end
-
     if rapidFireEnabled then
-        local now = tick()
-        if now - lastRapidFireTime >= (1 / rapidFireRate) then
-            local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-            local shootRem = remotesFolder and remotesFolder:FindFirstChild("ShootReplicate")
-            local lp = Players.LocalPlayer
-            local myChar = lp and lp.Character
-            local myHead = myChar and myChar:FindFirstChild("Head")
-            if shootRem and myHead then
-                -- find nearest alive enemy head
-                local bestHead, bestDist
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p ~= lp and p.Character then
-                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                        local head = p.Character:FindFirstChild("Head")
-                        if hum and head and hum.Health > 0 then
-                            local d = (head.Position - myHead.Position).Magnitude
-                            if not bestDist or d < bestDist then
-                                bestDist, bestHead = d, head
-                            end
+        local remotesFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        local shootRem = remotesFolder and remotesFolder:FindFirstChild("ShootReplicate")
+        local hitRem = remotesFolder and remotesFolder:FindFirstChild("Hit")
+        local reportHitRem = remotesFolder and remotesFolder:FindFirstChild("ReportHit")
+        local lp = Players.LocalPlayer
+        local myChar = lp and lp.Character
+        local myHead = myChar and myChar:FindFirstChild("Head")
+        if shootRem and myHead then
+            -- fire at EVERY alive enemy head this frame, any distance = kill all
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= lp and p.Character then
+                    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+                    local head = p.Character:FindFirstChild("Head")
+                    if hum and head and hum.Health > 0 then
+                        rapidShotId = rapidShotId + 1
+                        local origin = head.Position + Vector3.new(0, 0.1, 0)
+                        local payload = {
+                            hitPos = head.Position,
+                            to = head.Position,
+                            origin = origin,
+                            id = rapidShotId,
+                            mode = "single",
+                            hitNormal = Vector3.new(0, 1, 0),
+                            effects = { Frost = 0, Ricochet = 0, Barrage = 0 },
+                            ownerUserId = lp.UserId,
+                            isCharacterHit = true,
+                            kind = "bullet",
+                            hitInstance = head,
+                            isADS = false,
+                        }
+                        pcall(function() shootRem:FireServer(payload) end)
+                        -- also try dedicated damage remotes if present
+                        if hitRem then
+                            pcall(function() hitRem:FireServer(payload) end)
+                        end
+                        if reportHitRem then
+                            pcall(function() reportHitRem:FireServer(payload) end)
                         end
                     end
-                end
-                if bestHead then
-                    rapidShotId = rapidShotId + 1
-                    local payload = {
-                        hitPos = bestHead.Position,
-                        to = bestHead.Position,
-                        origin = myHead.Position,
-                        id = rapidShotId,
-                        mode = "single",
-                        hitNormal = Vector3.new(0, 1, 0),
-                        effects = { Frost = 0, Ricochet = 0, Barrage = 0 },
-                        ownerUserId = lp.UserId,
-                        isCharacterHit = true,
-                        kind = "bullet",
-                        hitInstance = bestHead,
-                        isADS = false,
-                    }
-                    pcall(function()
-                        shootRem:FireServer(payload)
-                    end)
-                    lastRapidFireTime = now
                 end
             end
         end
