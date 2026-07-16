@@ -45,6 +45,10 @@ local lastShotTime = 0
 local autoFireEnabled = false
 local autoFireRate = 15
 local lastAutoFireTime = 0
+local fastReloadEnabled = false
+local reloadRemotes = {}
+local reloadRemotesScanned = false
+local scanReloadRemotes
 local nameColor = Color3.fromRGB(255, 255, 255)
 local glowColor = Color3.fromRGB(255, 70, 70)
 
@@ -1359,6 +1363,18 @@ local function buildGUI()
         nil, nil
     )
 
+    -- fast reload (experimental: spam reload remotes)
+    rowY = addToggle(rowY, "Fast Reload (exp)",
+        function() return fastReloadEnabled end,
+        function(v)
+            fastReloadEnabled = v
+            if v and not reloadRemotesScanned then
+                scanReloadRemotes()
+            end
+        end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -2444,7 +2460,39 @@ RunService.Heartbeat:Connect(function(dt)
             lastAutoFireTime = now
         end
     end
+
+    if fastReloadEnabled then
+        -- Spam any reload-named RemoteEvents to try to make the server finish the
+        -- reload cooldown early. This is experimental: the server may ignore it.
+        for _, rem in ipairs(reloadRemotes) do
+            if rem and rem.Parent then
+                pcall(function()
+                    rem:FireServer()
+                end)
+            end
+        end
+    end
 end)
+
+-- Scan the game for RemoteEvents whose name suggests reloading, so Fast Reload
+-- can spam them. Best-effort: names vary per game.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+function scanReloadRemotes()
+    reloadRemotes = {}
+    local roots = { ReplicatedStorage, workspace }
+    for _, root in ipairs(roots) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("RemoteEvent") then
+                local n = string.lower(obj.Name)
+                if string.find(n, "reload") then
+                    table.insert(reloadRemotes, obj)
+                end
+            end
+        end
+    end
+    reloadRemotesScanned = true
+    warn("[FastReload] found " .. #reloadRemotes .. " reload remote(s)")
+end
 
 -- Re-apply WalkSpeed the instant the game tries to reset it (many games force 16
 -- every frame). Rehooks on each new character.
