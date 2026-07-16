@@ -16,6 +16,8 @@ local antiAimEnabled = false
 local speedHackEnabled = false
 local speedHackValue = 2
 local setSpeedHack
+local fastActionEnabled = false
+local fastActionValue = 2
 local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
@@ -1329,6 +1331,24 @@ local function buildGUI()
         nil, nil
     )
 
+    -- fast reload/shoot toggle (animation speed)
+    rowY = addToggle(rowY, "Fast Reload/Shoot",
+        function() return fastActionEnabled end,
+        function(v)
+            fastActionEnabled = v
+            if not v and LocalPlayer and LocalPlayer.Character then
+                local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                local animator = hum and hum:FindFirstChildOfClass("Animator")
+                if animator then
+                    for _, t in ipairs(animator:GetPlayingAnimationTracks()) do
+                        t:AdjustSpeed(1)
+                    end
+                end
+            end
+        end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -1999,6 +2019,113 @@ local function buildGUI()
 
     rowY = rowY + 45
 
+    -- fast action (reload/shoot) multiplier slider
+    do
+        local y = rowY
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, 16)
+        label.Position = UDim2.new(0, 0, 0, y)
+        label.Text = "Fast Action x" .. string.format("%.1f", fastActionValue)
+        label.TextColor3 = Color3.fromRGB(190, 190, 195)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = content
+
+        local trackBg = Instance.new("Frame")
+        trackBg.Size = UDim2.new(1, -14, 0, 3)
+        trackBg.Position = UDim2.new(0, 0, 0, y + 22)
+        trackBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+        trackBg.BorderSizePixel = 0
+        trackBg.Parent = content
+
+        local trackBgCorner = Instance.new("UICorner")
+        trackBgCorner.CornerRadius = UDim.new(0, 2)
+        trackBgCorner.Parent = trackBg
+
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(0, 0, 1, 0)
+        track.BackgroundColor3 = Color3.fromRGB(0, 180, 255)
+        track.BorderSizePixel = 0
+        track.Parent = trackBg
+
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(0, 2)
+        trackCorner.Parent = track
+
+        local thumb = Instance.new("TextButton")
+        thumb.Size = UDim2.new(0, 16, 0, 16)
+        thumb.Text = ""
+        thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        thumb.BorderSizePixel = 0
+        thumb.Parent = content
+
+        local thumbCorner = Instance.new("UICorner")
+        thumbCorner.CornerRadius = UDim.new(0, 8)
+        thumbCorner.Parent = thumb
+
+        local thumbStroke = Instance.new("UIStroke")
+        thumbStroke.Color = Color3.fromRGB(0, 180, 255)
+        thumbStroke.Thickness = 2
+        thumbStroke.Parent = thumb
+
+        local faMin, faMax = 1, 20
+        local faDefault = 2
+
+        local function updateFaSlider()
+            local trackWidth = trackBg.AbsoluteSize.X
+            if trackWidth == 0 then return end
+            local relX = (fastActionValue - faMin) / (faMax - faMin) * trackWidth
+            track.Size = UDim2.new(0, relX, 1, 0)
+            thumb.Position = UDim2.fromOffset(relX - 8, y + 22 - 7)
+            label.Text = "Fast Action x" .. string.format("%.1f", fastActionValue)
+        end
+
+        local hit = Instance.new("TextButton")
+        hit.Size = UDim2.new(1, 0, 0, 30)
+        hit.Position = UDim2.new(0, 0, 0, y + 6)
+        hit.BackgroundTransparency = 1
+        hit.Text = ""
+        hit.ZIndex = 1
+        hit.Parent = content
+
+        local function setFaFromX(mouseX)
+            local tLeft = trackBg.AbsolutePosition.X
+            local tWidth = trackBg.AbsoluteSize.X
+            if tWidth == 0 then return end
+            local relX = math.clamp(mouseX - tLeft, 0, tWidth)
+            fastActionValue = faMin + (faMax - faMin) * (relX / tWidth)
+            updateFaSlider()
+        end
+
+        updateFaSlider()
+
+        thumb.ZIndex = 3
+        local faDrag = false
+        thumb.MouseButton1Down:Connect(function() faDrag = true end)
+        hit.MouseButton1Down:Connect(function()
+            setFaFromX(UserInputService:GetMouseLocation().X)
+            faDrag = true
+        end)
+        thumb.MouseButton2Click:Connect(function()
+            fastActionValue = faDefault
+            updateFaSlider()
+        end)
+
+        table.insert(sliderHandlers, function()
+            if not faDrag then return end
+            setFaFromX(UserInputService:GetMouseLocation().X)
+        end)
+
+        table.insert(sliderUpHandlers, function()
+            faDrag = false
+        end)
+    end
+
+    rowY = rowY + 45
+
     -- shared mouse handlers for panel drag + all sliders
     mouseMoveConn = UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
@@ -2176,6 +2303,18 @@ RunService.Heartbeat:Connect(function(dt)
                 -- frame time so it's framerate-independent.
                 local extra = dir * 16 * (speedHackValue - 1) * dt
                 hrp.CFrame = hrp.CFrame + extra
+            end
+        end
+    end
+
+    if fastActionEnabled then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, t in ipairs(animator:GetPlayingAnimationTracks()) do
+                if t.Speed ~= fastActionValue then
+                    t:AdjustSpeed(fastActionValue)
+                end
             end
         end
     end
