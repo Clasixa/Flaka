@@ -2519,13 +2519,22 @@ function scanReloadRemotes()
         end
     end
     reloadRemotesScanned = true
+    -- Log full list to the Delta console (print/warn are captured there)
+    print("[FastReload] ===== RemoteEvent scan =====")
+    print("[FastReload] total RemoteEvents found: " .. #allNames)
+    for _, nm in ipairs(allNames) do
+        print("[FastReload] remote: " .. nm)
+    end
+    print("[FastReload] matched (reload/ammo/gun/weapon): " .. #reloadRemotes)
+    for _, rem in ipairs(reloadRemotes) do
+        print("[FastReload] -> " .. rem:GetFullName())
+    end
+    print("[FastReload] ============================")
+
     if #reloadRemotes > 0 then
-        showToast("Fast Reload: matched " .. #reloadRemotes .. " remote(s)")
+        showToast("Fast Reload: matched " .. #reloadRemotes .. " remote(s) - see console")
     else
-        -- show a few remote names so we can find the right one
-        local sample = table.concat(allNames, ", ")
-        if #sample > 120 then sample = string.sub(sample, 1, 120) .. "..." end
-        showToast("No reload remote. Remotes: " .. (sample == "" and "none" or sample))
+        showToast("No reload remote - check Delta console for full list")
     end
 end
 
