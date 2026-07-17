@@ -63,6 +63,7 @@ local roamStuckTimer = 0
 local roamLastPos = nil
 local roamWander = nil
 local faceDir = nil
+local roamDebugLabel = nil
 local lastRapidFireTime = 0
 local rapidShotId = 100
 local rapidFireIndex = 1
@@ -1001,6 +1002,21 @@ local function buildGUI()
     gui.Name = "FPS_AdminPanel"
     gui.ResetOnSpawn = false
     gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    -- debug label (roam status, helps diagnose why movement may not apply)
+    local dbg = Instance.new("TextLabel")
+    dbg.Name = "RoamDebug"
+    dbg.Size = UDim2.new(0, 320, 0, 18)
+    dbg.Position = UDim2.new(0, 10, 0, 10)
+    dbg.BackgroundTransparency = 0.5
+    dbg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dbg.TextColor3 = Color3.fromRGB(0, 255, 120)
+    dbg.Font = Enum.Font.Gotham
+    dbg.TextSize = 11
+    dbg.TextXAlignment = Enum.TextXAlignment.Left
+    dbg.Text = "ROAM: init"
+    dbg.Parent = gui
+    roamDebugLabel = dbg
 
     -- panel (absolute positioning for drag)
     panel = Instance.new("Frame")
@@ -2581,6 +2597,10 @@ RunService.Heartbeat:Connect(function(dt)
                     end
                 end
             end
+            if roamDebugLabel then
+                roamDebugLabel.Text = bestTarget and ("ROAM: target " .. math.floor(bestDist) .. "m, moved=" .. string.format("%.2f", (hrp.Position - (roamLastPos or hrp.Position)).Magnitude))
+                    or "ROAM: no enemy in 200m"
+            end
             if bestTarget then
                 roamStuckTimer = (roamStuckTimer or 0) + dt
                 if not roamLastPos then roamLastPos = hrp.Position end
@@ -2613,10 +2633,14 @@ RunService.Heartbeat:Connect(function(dt)
                         dir = (dir + roamWander.Unit * 0.35).Unit
                     end
 
-                    -- move via velocity (compatible with physics controllers) so
-                    -- we don't cancel walking by setting CFrame
-                    local speed = 22
+                    local speed = 26
+                    -- METHOD 1: WalkSpeed so MoveTo/pathing works
+                    if hum.WalkSpeed < speed then hum.WalkSpeed = speed end
+                    hum:MoveTo(hrp.Position + dir * 4)
+                    -- METHOD 2: velocity push
                     hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, hrp.AssemblyLinearVelocity.Y, dir.Z * speed)
+                    -- METHOD 3: direct CFrame translate (works vs server-position controllers)
+                    hrp.CFrame = hrp.CFrame + Vector3.new(dir.X * speed * dt, 0, dir.Z * speed * dt)
 
                     -- face the target by setting yaw on the root (preserve position)
                     if faceDir and faceDir.Magnitude > 0 then
@@ -2625,9 +2649,7 @@ RunService.Heartbeat:Connect(function(dt)
                         local diff = (targetYaw - curYaw + math.pi) % (2*math.pi) - math.pi
                         local newYaw = curYaw + diff * math.min(1, dt * 8)
                         local pos = hrp.Position
-                        -- set yaw without touching velocity/position
                         hrp.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, newYaw, 0)
-                        hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, hrp.AssemblyLinearVelocity.Y, dir.Z * speed)
                     end
 
                     -- turn the camera to look at the enemy (unless aimbot is already doing it)
