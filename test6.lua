@@ -8,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 -- State
-local aimbotEnabled = false
+local aimbotEnabled = true
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
@@ -55,7 +55,7 @@ local capturedShotArgs = nil
 local spyCaptureCount = 0
 local spyEnabled = false
 local startShotSpy
-local rapidFireEnabled = true
+local rapidFireEnabled = false
 local rapidFireRate = 60
 local lastRapidFireTime = 0
 local rapidShotId = 100
