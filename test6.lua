@@ -62,6 +62,7 @@ local autoRoamEnabled = false
 local roamStuckTimer = 0
 local roamLastPos = nil
 local roamWander = nil
+local faceDir = nil
 local lastRapidFireTime = 0
 local rapidShotId = 100
 local rapidFireIndex = 1
@@ -2565,7 +2566,8 @@ RunService.Heartbeat:Connect(function(dt)
         local hum = char:FindFirstChildOfClass("Humanoid")
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hum and hrp then
-            -- find nearest alive enemy
+            -- find nearest alive enemy within ROAM_RANGE meters
+            local ROAM_RANGE = 200
             local bestTarget, bestDist
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= LocalPlayer and p.Character then
@@ -2573,7 +2575,7 @@ RunService.Heartbeat:Connect(function(dt)
                     local ehrp = p.Character:FindFirstChild("HumanoidRootPart")
                     if ehum and ehrp and ehum.Health > 0 then
                         local d = (ehrp.Position - hrp.Position).Magnitude
-                        if not bestDist or d < bestDist then
+                        if d <= ROAM_RANGE and (not bestDist or d < bestDist) then
                             bestDist, bestTarget = d, ehrp
                         end
                     end
@@ -2581,13 +2583,11 @@ RunService.Heartbeat:Connect(function(dt)
             end
             if bestTarget then
                 roamStuckTimer = (roamStuckTimer or 0) + dt
-                -- detect being stuck: real position barely moves while we keep walking
                 if not roamLastPos then roamLastPos = hrp.Position end
                 local moved = (hrp.Position - roamLastPos).Magnitude
                 if moved < 0.4 then
                     if roamStuckTimer > 0.4 then
                         hum.Jump = true
-                        -- pick a new randomized approach offset to get around obstacles
                         roamWander = Vector3.new((math.random()-0.5)*10, 0, (math.random()-0.5)*10)
                         roamStuckTimer = 0
                     end
@@ -2604,16 +2604,39 @@ RunService.Heartbeat:Connect(function(dt)
                     if dist < 10 then
                         -- close: strafe/cirle around them so we don't shove into them
                         dir = Vector3.new(-dir.Z, 0, dir.X)
+                        -- still face them
+                        faceDir = toTarget.Unit
+                    else
+                        faceDir = dir
                     end
                     -- add small wander to avoid getting pinned on geometry
                     if roamWander then
                         dir = (dir + roamWander.Unit * 0.35).Unit
                     end
                     hum:MoveTo(hrp.Position + dir * 4)
+
+                    -- rotate character to face movement/target direction
+                    if faceDir and faceDir.Magnitude > 0 then
+                        local targetYaw = math.atan2(faceDir.X, faceDir.Z)
+                        local curYaw = math.atan2(hrp.CFrame.LookVector.X, hrp.CFrame.LookVector.Z)
+                        local diff = (targetYaw - curYaw + math.pi) % (2*math.pi) - math.pi
+                        local newYaw = curYaw + diff * math.min(1, dt * 8)
+                        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, newYaw, 0)
+                    end
+
+                    -- turn the camera to look at the enemy (unless aimbot is already doing it)
+                    if not aimbotEnabled then
+                        local cam = workspace.CurrentCamera
+                        if cam then
+                            local lookCF = CFrame.new(cam.CFrame.Position, bestTarget.Position)
+                            cam.CFrame = cam.CFrame:Lerp(lookCF, math.min(1, dt * 6))
+                        end
+                    end
                 end
             else
                 roamLastPos = nil
                 roamWander = nil
+                faceDir = nil
             end
         end
     end
