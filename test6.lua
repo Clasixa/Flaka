@@ -58,7 +58,7 @@ local startShotSpy
 local rapidFireEnabled = false
 local rapidFireRate = 60
 local spinCameraEnabled = false
-local autoRoamEnabled = false
+local autoRoamEnabled = true
 local roamStuckTimer = 0
 local roamLastPos = nil
 local roamWander = nil
@@ -2604,7 +2604,6 @@ RunService.Heartbeat:Connect(function(dt)
                     if dist < 10 then
                         -- close: strafe/cirle around them so we don't shove into them
                         dir = Vector3.new(-dir.Z, 0, dir.X)
-                        -- still face them
                         faceDir = toTarget.Unit
                     else
                         faceDir = dir
@@ -2613,15 +2612,22 @@ RunService.Heartbeat:Connect(function(dt)
                     if roamWander then
                         dir = (dir + roamWander.Unit * 0.35).Unit
                     end
-                    hum:MoveTo(hrp.Position + dir * 4)
 
-                    -- rotate character to face movement/target direction
+                    -- move via velocity (compatible with physics controllers) so
+                    -- we don't cancel walking by setting CFrame
+                    local speed = 22
+                    hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, hrp.AssemblyLinearVelocity.Y, dir.Z * speed)
+
+                    -- face the target by setting yaw on the root (preserve position)
                     if faceDir and faceDir.Magnitude > 0 then
                         local targetYaw = math.atan2(faceDir.X, faceDir.Z)
                         local curYaw = math.atan2(hrp.CFrame.LookVector.X, hrp.CFrame.LookVector.Z)
                         local diff = (targetYaw - curYaw + math.pi) % (2*math.pi) - math.pi
                         local newYaw = curYaw + diff * math.min(1, dt * 8)
-                        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, newYaw, 0)
+                        local pos = hrp.Position
+                        -- set yaw without touching velocity/position
+                        hrp.CFrame = CFrame.new(pos.X, pos.Y, pos.Z) * CFrame.Angles(0, newYaw, 0)
+                        hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, hrp.AssemblyLinearVelocity.Y, dir.Z * speed)
                     end
 
                     -- turn the camera to look at the enemy (unless aimbot is already doing it)
