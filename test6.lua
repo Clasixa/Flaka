@@ -8,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 -- State
-local aimbotEnabled = true
+local aimbotEnabled = false
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
@@ -57,6 +57,8 @@ local spyEnabled = false
 local startShotSpy
 local rapidFireEnabled = false
 local rapidFireRate = 60
+local spinCameraEnabled = false
+local autoRoamEnabled = false
 local lastRapidFireTime = 0
 local rapidShotId = 100
 local rapidFireIndex = 1
@@ -1381,6 +1383,18 @@ local function buildGUI()
         nil, nil
     )
 
+    rowY = addToggle(rowY, "Spin Camera",
+        function() return spinCameraEnabled end,
+        function(v) spinCameraEnabled = v end,
+        nil, nil
+    )
+
+    rowY = addToggle(rowY, "Auto Roam (AI walk)",
+        function() return autoRoamEnabled end,
+        function(v) autoRoamEnabled = v end,
+        nil, nil
+    )
+
     -- thin line separator
     do
         local sep = Instance.new("Frame")
@@ -2518,6 +2532,52 @@ end
 RunService.Heartbeat:Connect(function(dt)
     if not LocalPlayer or not LocalPlayer.Character then return end
     local char = LocalPlayer.Character
+
+    if spinCameraEnabled then        local cam = workspace.CurrentCamera
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if cam and hrp then
+            spinCameraAngle = (spinCameraAngle or 0) + dt
+            local radius = 8
+            local yOff = 4
+            local px = hrp.Position.X + math.cos(spinCameraAngle) * radius
+            local pz = hrp.Position.Z + math.sin(spinCameraAngle) * radius
+            cam.CFrame = CFrame.new(Vector3.new(px, hrp.Position.Y + yOff, pz), hrp.Position)
+        end
+    end
+
+    if autoRoamEnabled then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then
+            -- find nearest alive enemy
+            local bestTarget, bestDist
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local ehum = p.Character:FindFirstChildOfClass("Humanoid")
+                    local ehrp = p.Character:FindFirstChild("HumanoidRootPart")
+                    if ehum and ehrp and ehum.Health > 0 then
+                        local d = (ehrp.Position - hrp.Position).Magnitude
+                        if not bestDist or d < bestDist then
+                            bestDist, bestTarget = d, ehrp
+                        end
+                    end
+                end
+            end
+            if bestTarget then
+                local toTarget = (bestTarget.Position - hrp.Position)
+                toTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
+                local dist = toTarget.Magnitude
+                if dist > 0 then
+                    local dir = toTarget.Unit
+                    if dist < 8 then
+                        -- close: strafe/cirle around them
+                        dir = Vector3.new(-dir.Z, 0, dir.X)
+                    end
+                    hum:MoveTo(hrp.Position + dir * 4)
+                end
+            end
+        end
+    end
 
     if antiAimEnabled then
         local hrp = char:FindFirstChild("HumanoidRootPart")
