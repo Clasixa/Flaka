@@ -8,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 -- State
-local aimbotEnabled = false
+local aimbotEnabled = true
 local silentAimEnabled = false
 local wallbangEnabled = false
 local alwaysHitEnabled = false
@@ -18,7 +18,7 @@ local speedHackValue = 2
 local setSpeedHack
 local fastActionEnabled = false
 local fastActionValue = 2
-local autoShootEnabled = false
+local autoShootEnabled = true
 local noRecoilEnabled = false
 local noSpreadEnabled = false
 local noclipEnabled = false
@@ -37,7 +37,7 @@ local espGlowEnabled = false
 local espOutlinesEnabled = false
 local espSkeletonEnabled = false
 local espBoxEnabled = false
-local fovRadius = 60
+local fovRadius = 4000
 local cameraFov = 75
 local aimbotSmoothness = 0.3
 local autoShootCooldown = 0.12
@@ -59,6 +59,9 @@ local rapidFireEnabled = false
 local rapidFireRate = 60
 local spinCameraEnabled = false
 local autoRoamEnabled = false
+local roamStuckTimer = 0
+local roamLastPos = nil
+local roamWander = nil
 local lastRapidFireTime = 0
 local rapidShotId = 100
 local rapidFireIndex = 1
@@ -689,7 +692,10 @@ local function startAimbotLoop()
             candidates[#candidates + 1] = "Right Leg"
         end
 
-        -- find closest visible target part inside FOV
+        -- find closest valid target part
+        -- when fovRadius is at max (>= rangeMax) we ignore screen position and FOV
+        -- pixel radius entirely -> aim at nearest enemy anywhere (even behind / off-screen)
+        local aimAnywhere = fovRadius >= 3999
         local targetPart = nil
         local shortest = math.huge
 
@@ -701,12 +707,21 @@ local function startAimbotLoop()
                 for _, partName in ipairs(candidates) do
                     local part = p.Character:FindFirstChild(partName)
                     if part then
-                        local screenPos, onScreen = cam:WorldToScreenPoint(part.Position)
-                        if onScreen then
-                            local d = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                            if d < fovRadius and d < shortest and (wallbangEnabled or not visCheckEnabled or hasLOS(part)) then
+                        if aimAnywhere then
+                            -- pick nearest enemy by 3D distance to camera
+                            local d = (part.Position - cam.CFrame.Position).Magnitude
+                            if d < shortest and (wallbangEnabled or not visCheckEnabled or hasLOS(part)) then
                                 shortest = d
                                 targetPart = part
+                            end
+                        else
+                            local screenPos, onScreen = cam:WorldToScreenPoint(part.Position)
+                            if onScreen then
+                                local d = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                                if d < fovRadius and d < shortest and (wallbangEnabled or not visCheckEnabled or hasLOS(part)) then
+                                    shortest = d
+                                    targetPart = part
+                                end
                             end
                         end
                     end
@@ -1685,8 +1700,8 @@ local function buildGUI()
         thumbStroke.Thickness = 2
         thumbStroke.Parent = thumb
 
-        local rangeMin, rangeMax = 50, 500
-        local rangeDefault = 160
+        local rangeMin, rangeMax = 50, 4000
+        local rangeDefault = 4000
 
         local function updateSlider()
             local trackWidth = trackBg.AbsoluteSize.X
@@ -2533,7 +2548,8 @@ RunService.Heartbeat:Connect(function(dt)
     if not LocalPlayer or not LocalPlayer.Character then return end
     local char = LocalPlayer.Character
 
-    if spinCameraEnabled then        local cam = workspace.CurrentCamera
+    if spinCameraEnabled then
+        local cam = workspace.CurrentCamera
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if cam and hrp then
             spinCameraAngle = (spinCameraAngle or 0) + dt
@@ -2564,17 +2580,40 @@ RunService.Heartbeat:Connect(function(dt)
                 end
             end
             if bestTarget then
+                roamStuckTimer = (roamStuckTimer or 0) + dt
+                -- detect being stuck: real position barely moves while we keep walking
+                if not roamLastPos then roamLastPos = hrp.Position end
+                local moved = (hrp.Position - roamLastPos).Magnitude
+                if moved < 0.4 then
+                    if roamStuckTimer > 0.4 then
+                        hum.Jump = true
+                        -- pick a new randomized approach offset to get around obstacles
+                        roamWander = Vector3.new((math.random()-0.5)*10, 0, (math.random()-0.5)*10)
+                        roamStuckTimer = 0
+                    end
+                else
+                    roamStuckTimer = 0
+                end
+                roamLastPos = hrp.Position
+
                 local toTarget = (bestTarget.Position - hrp.Position)
                 toTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
                 local dist = toTarget.Magnitude
                 if dist > 0 then
                     local dir = toTarget.Unit
-                    if dist < 8 then
-                        -- close: strafe/cirle around them
+                    if dist < 10 then
+                        -- close: strafe/cirle around them so we don't shove into them
                         dir = Vector3.new(-dir.Z, 0, dir.X)
+                    end
+                    -- add small wander to avoid getting pinned on geometry
+                    if roamWander then
+                        dir = (dir + roamWander.Unit * 0.35).Unit
                     end
                     hum:MoveTo(hrp.Position + dir * 4)
                 end
+            else
+                roamLastPos = nil
+                roamWander = nil
             end
         end
     end
